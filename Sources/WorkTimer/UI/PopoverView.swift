@@ -205,6 +205,14 @@ private struct SessionRow: View {
                 .buttonStyle(.borderless)
                 .opacity(hovering ? 1 : 0)
                 .help("Delete session")
+            } else {
+                // Reserve the trash button's space so durations stay aligned across rows.
+                Button(action: {}) {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+                .hidden()
+                .accessibilityHidden(true)
             }
         }
         .font(.callout)
