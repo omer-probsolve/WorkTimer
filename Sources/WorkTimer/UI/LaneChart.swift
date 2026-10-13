@@ -180,6 +180,95 @@ struct ConcurrencyBar: View {
     }
 }
 
+/// The union of a chart's track frames, so a hover line can cross every lane.
+struct TrackFrameKey: PreferenceKey {
+    static var defaultValue: CGRect = .null
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) { value = value.union(nextValue()) }
+}
+
+extension View {
+    /// Reports this track's frame in the named coordinate space to `TrackFrameKey`.
+    func reportsTrackFrame(in space: String) -> some View {
+        background(GeometryReader { Color.clear.preference(key: TrackFrameKey.self, value: $0.frame(in: .named(space))) })
+    }
+}
+
+/// A vertical line through every track at `x`, with `card` beside it — on the
+/// right, or on the left when it would run past the edge.
+struct HoverLine<Card: View>: View {
+    let x: CGFloat
+    let tracks: CGRect
+    @ViewBuilder let card: Card
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .topLeading) {
+                Rectangle()
+                    .fill(Color.primary)
+                    .frame(width: 1, height: tracks.height + 8)
+                    .offset(x: x, y: tracks.minY - 4)
+                card
+                    .fixedSize()
+                    .alignmentGuide(.leading) { card in
+                        x + 12 + card.width > geometry.size.width ? -(x - 12 - card.width) : -(x + 12)
+                    }
+                    .alignmentGuide(.top) { _ in -(tracks.minY - 4) }
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+/// The hover card: the time, what each lane was doing, and how many were working.
+struct MomentCard: View {
+    struct Row: Identifiable {
+        let id: String
+        let title: String
+        let color: Color
+        /// nil when the lane was idle.
+        let text: String?
+    }
+
+    let title: String
+    let rows: [Row]
+    let workers: Int
+
+    var body: some View {
+        Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 3) {
+            GridRow {
+                Text(title).fontWeight(.semibold).gridCellColumns(2)
+            }
+            .padding(.bottom, 3)
+            ForEach(rows) { row in
+                line(row.title, value: row.text ?? "idle", dot: row.text == nil ? .trackFill : row.color)
+                    .foregroundStyle(row.text == nil ? .tertiary : .primary)
+            }
+            Divider().padding(.vertical, 2)
+            line("Workers", value: "\(workers)", dot: .secondary)
+                .fontWeight(.semibold)
+        }
+        .font(.caption)
+        .monospacedDigit()
+        .padding(9)
+        .background(
+            RoundedRectangle(cornerRadius: 7)
+                .fill(Color(nsColor: .windowBackgroundColor))
+                .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Color.primary.opacity(0.2), lineWidth: 0.5))
+                .shadow(color: .black.opacity(0.15), radius: 6, y: 2)
+        )
+    }
+
+    private func line(_ title: String, value: String, dot: Color) -> some View {
+        GridRow {
+            HStack(spacing: 6) {
+                Circle().fill(dot).frame(width: 7, height: 7)
+                Text(title).lineLimit(1)
+            }
+            Text(value).lineLimit(1).gridColumnAlignment(.trailing)
+        }
+    }
+}
+
 /// When work happens across the week: a row per day, Sunday first, and a
 /// column per hour. Each cell has a stripe per worker, shaded by how much of
 /// that worker's time falls in it.

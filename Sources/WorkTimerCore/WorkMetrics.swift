@@ -180,6 +180,27 @@ package struct WorkMetrics {
         return steps
     }
 
+    /// Who was working on what at `date`, for the timeline's hover card.
+    package func moment(at date: Date, now: Date) -> Moment {
+        let contains = { (span: Span) in span.start <= date && date < span.end }
+        var activities: [Moment.Activity] = []
+        if let yours = yourSpans(now: now).merged().first(where: contains) {
+            activities.append(Moment.Activity(worker: .you, project: nil, since: yours.start))
+        }
+        let segments = agentSegments(now: now)
+        let bySession = Dictionary(grouping: segments, by: \.sessionID)
+        for segment in segments where contains(segment.span) {
+            // Measured from the start of the session table's row, as `running` does.
+            let block = (bySession[segment.sessionID] ?? []).map(\.span)
+                .merged(bridging: Self.rowBridge).first(where: contains)
+            activities.append(Moment.Activity(
+                worker: segment.worker, project: segment.project, since: block?.start ?? segment.span.start
+            ))
+        }
+        let session = sessionSpans(now: now).first(where: contains)
+        return Moment(date: date, activities: activities, sessionSince: session?.start)
+    }
+
     // MARK: - Right now
 
     package func running(now: Date) -> [RunningAgent] {
@@ -283,6 +304,61 @@ package struct WorkMetrics {
             }
         }
         return entries.sorted { $0.span.start > $1.span.start }
+    }
+}
+
+/// One instant on the timeline: who was working, on what, and for how long.
+package struct Moment {
+    package struct Activity {
+        package let worker: Worker
+        /// nil for your time.
+        package let project: String?
+        /// When this stretch of work began.
+        package let since: Date
+    }
+
+    package let date: Date
+    /// You at most once, plus one per agent session working at `date`.
+    package let activities: [Activity]
+    /// When the current stretch of work by anyone began; nil when nobody was working.
+    package let sessionSince: Date?
+
+    /// The Workers lane's count: you as one, every agent session as one more.
+    package var workers: Int { activities.count }
+
+    /// "0:42" into the stretch of work, or nil when nobody was working.
+    package var sessionText: String? {
+        sessionSince.map { Format.clock(date.timeIntervalSince($0), seconds: false) }
+    }
+
+    /// "WorkTimer · 0:42" for one session, "WorkTimer, Notes · 2 sessions" for
+    /// parallel ones, "0:42" for you; nil when `worker` wasn't working.
+    package func text(for worker: Worker) -> String? {
+        describe(activities.filter { $0.worker == worker }, label: { $0.project })
+    }
+
+    /// "Claude · 0:42", or "Claude, Codex · 2 sessions"; nil when no agent was
+    /// working on `project`.
+    package func text(forProject project: String) -> String? {
+        describe(activities.filter { $0.project == project }, label: { $0.worker.name })
+    }
+
+    /// The workers on `project` at this moment, in lane order.
+    package func workers(onProject project: String) -> [Worker] {
+        Worker.allCases.filter { worker in activities.contains { $0.project == project && $0.worker == worker } }
+    }
+
+    private func describe(_ activities: [Activity], label: (Activity) -> String?) -> String? {
+        guard let first = activities.first else { return nil }
+        var labels: [String] = []
+        for activity in activities {
+            if let label = label(activity), !labels.contains(label) { labels.append(label) }
+        }
+        let names = labels.joined(separator: ", ")
+        let detail = activities.count == 1
+            ? Format.clock(date.timeIntervalSince(first.since), seconds: false)
+            : "\(activities.count) sessions"
+        return names.isEmpty ? detail : "\(names) · \(detail)"
     }
 }
 

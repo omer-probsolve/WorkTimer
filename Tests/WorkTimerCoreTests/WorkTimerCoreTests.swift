@@ -187,6 +187,33 @@ final class WorkMetricsTests: XCTestCase {
         XCTAssertEqual(metrics.weekHeatmaps(worker: .codex, now: now).map(\.worker), [.codex])
     }
 
+    func testMomentMatchesConcurrencyAndMeasuresFromTheRowStart() {
+        var log = SessionLog()
+        log.start(at: at(0), automatic: false)
+        log.stop(at: at(3600), reason: .manual)
+        // Session "a" pauses for 10 minutes — inside one table row.
+        let metrics = WorkMetrics(
+            log: log,
+            segments: [segment("a", 0, 1200), segment("a", 1800, 3600), segment("b", 600, 3600), segment("x", 0, 1800, .codex)],
+            trackingStart: at(-86_400)
+        )
+        let now = at(10_000)
+        let moment = metrics.moment(at: at(2400), now: now)
+        let step = metrics.concurrency(in: DateInterval(start: at(0), end: now), now: now)
+            .first { $0.span.start <= at(2400) && at(2400) < $0.span.end }
+        XCTAssertEqual(moment.workers, step?.count)
+        XCTAssertEqual(moment.workers, 3)
+        XCTAssertEqual(moment.text(for: .you), "0:40")
+        XCTAssertEqual(moment.text(for: .claude), "p · 2 sessions")
+        XCTAssertNil(moment.text(for: .codex))
+        XCTAssertEqual(metrics.moment(at: at(1500), now: now).text(for: .codex), "p · 0:25")
+        XCTAssertEqual(metrics.moment(at: at(2400), now: now).text(forProject: "p"), "Claude · 2 sessions")
+        XCTAssertEqual(moment.sessionText, "0:40")
+        let idle = metrics.moment(at: at(5000), now: now)
+        XCTAssertEqual(idle.workers, 0)
+        XCTAssertNil(idle.sessionText)
+    }
+
     func testLeverageNeedsYourTime() {
         let metrics = WorkMetrics(log: SessionLog(), segments: [segment("a", 0, 3600)], trackingStart: at(-86_400))
         XCTAssertNil(metrics.leverage(in: DateInterval(start: at(-100), end: at(10_000)), now: at(10_000)))

@@ -102,7 +102,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if info["window"] == "glance" {
                 self?.statusItem.showPopover()
             } else {
-                self?.dashboard.debugConfigure(grouping: info["grouping"], period: info["period"], step: info["step"], filter: info["filter"])
+                self?.dashboard.debugConfigure(grouping: info["grouping"], period: info["period"], step: info["step"], filter: info["filter"], hover: info["hover"])
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                 for window in NSApp.windows where window.isVisible {

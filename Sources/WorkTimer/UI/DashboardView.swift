@@ -30,6 +30,8 @@ final class DashboardModel: ObservableObject {
     /// nil shows everything — the Session card.
     @Published var filter: Filter?
     @Published var showSettings = false
+    /// Where the pointer is along the timeline, 0 to 1; nil when it's elsewhere.
+    @Published var hover: Double?
 
     /// Picks `filter`, or clears it when it's already picked.
     func toggle(_ filter: Filter?) {
@@ -66,6 +68,8 @@ struct DashboardView: View {
     @ObservedObject var model: DashboardModel
 
     @State private var showExport = false
+    /// Where the timeline's tracks are, in the "lanes" space.
+    @State private var tracks: CGRect = .null
 
     var body: some View {
         VStack(spacing: 0) {
@@ -156,7 +160,8 @@ struct DashboardView: View {
         let lanes = lanes(interval: interval, now: now, segments: segments, live: live)
 
         return VStack(alignment: .leading, spacing: 14) {
-            laneChart(lanes, axis: axis, concurrency: log.metrics.concurrency(in: interval, now: now))
+            laneChart(lanes, axis: axis, concurrency: log.metrics.concurrency(in: interval, now: now), now: now)
+                .zIndex(1)  // The hover card may hang over the cards below.
             cards(interval: interval, now: now, live: live)
             heatmap(now: now)
             table(interval: interval, now: now)
@@ -192,7 +197,7 @@ struct DashboardView: View {
         }
     }
 
-    private func laneChart(_ lanes: [Lane], axis: ChartAxis, concurrency: [(span: Span, count: Int)]) -> some View {
+    private func laneChart(_ lanes: [Lane], axis: ChartAxis, concurrency: [(span: Span, count: Int)], now: Date) -> some View {
         Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 7) {
             if lanes.isEmpty {
                 GridRow {
@@ -216,6 +221,7 @@ struct DashboardView: View {
                     .frame(width: 140, alignment: .leading)
                     LaneBar(layers: lane.layers, axis: axis, height: 14, showOverlap: lane.showOverlap)
                         .opacity(model.filter == nil || selected ? 1 : 0.4)
+                        .reportsTrackFrame(in: "lanes")
                     Text(Format.clock(lane.total, seconds: false))
                         .monospacedDigit()
                         .frame(width: 48, alignment: .trailing)
@@ -232,6 +238,39 @@ struct DashboardView: View {
                 Color.clear.frame(width: 48, height: 1)
             }
         }
+        .coordinateSpace(name: "lanes")
+        .onPreferenceChange(TrackFrameKey.self) { tracks = $0 }
+        .onContinuousHover(coordinateSpace: .named("lanes")) { phase in
+            if case .active(let point) = phase, !tracks.isNull, tracks.width > 0,
+               tracks.insetBy(dx: 0, dy: -4).contains(point) {
+                model.hover = Double((point.x - tracks.minX) / tracks.width)
+            } else {
+                model.hover = nil
+            }
+        }
+        .overlay {
+            if let hover = model.hover, !tracks.isNull {
+                let date = axis.range.start.addingTimeInterval(axis.range.duration * hover)
+                HoverLine(x: tracks.minX + tracks.width * hover, tracks: tracks) { momentCard(lanes, at: date, now: now) }
+            }
+        }
+    }
+
+    private func momentCard(_ lanes: [Lane], at date: Date, now: Date) -> MomentCard {
+        let moment = log.metrics.moment(at: date, now: now)
+        let rows = lanes.map { lane -> MomentCard.Row in
+            switch lane.filter {
+            case nil:
+                return MomentCard.Row(id: lane.id, title: lane.title, color: .secondary, text: moment.sessionText)
+            case .worker(let worker):
+                return MomentCard.Row(id: lane.id, title: lane.title, color: worker.color, text: moment.text(for: worker))
+            case .project(let name):
+                return MomentCard.Row(id: lane.id, title: lane.title,
+                                      color: moment.workers(onProject: name).first?.color ?? .secondary,
+                                      text: moment.text(forProject: name))
+            }
+        }
+        return MomentCard(title: Format.instant(date, weekday: model.period == .week), rows: rows, workers: moment.workers)
     }
 
     /// How many workers were active at once: you count as one, every agent
@@ -248,7 +287,7 @@ struct DashboardView: View {
                 Text("Workers").foregroundStyle(.secondary)
             }
             .frame(width: 140, alignment: .leading)
-            bar
+            bar.reportsTrackFrame(in: "lanes")
             Text(bar.peak > 0 ? "max \(bar.peak)" : "—")
                 .foregroundStyle(.secondary)
                 .monospacedDigit()

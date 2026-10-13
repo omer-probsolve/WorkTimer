@@ -27,7 +27,7 @@ everywhere it's needed.
 | Agent transcript parsing, turn rules, the 5-minute silence rule | `WorkTimerCore/AgentLog.swift` (`AgentLogState`) |
 | Finding and reading transcripts, the parse cache | `WorkTimerCore/TranscriptScanner.swift` |
 | Project name for a folder | `WorkTimerCore/ProjectResolver.swift` |
-| All totals: per worker, agent-hours, session, multipliers, concurrency, who's live, table rows; tooltip copy (`Explain`); agent card text | `WorkTimerCore/WorkMetrics.swift` |
+| All totals: per worker, agent-hours, session, multipliers, concurrency, who's live, table rows, what was happening at a moment (`Moment`); tooltip copy (`Explain`); agent card text | `WorkTimerCore/WorkMetrics.swift` |
 | Every user-visible number / time / date format, and every `DateFormatter` | `WorkTimerCore/Format.swift` |
 | Worker names | `Worker` in `WorkTimerCore/AgentLog.swift` |
 | Publishing sessions to the macOS UI and saving them | `WorkTimer/Store/SessionStore.swift` |
@@ -36,7 +36,7 @@ everywhere it's needed.
 | Data folder location | `WorkTimer/Store/AppPaths.swift` |
 | Preferences | `WorkTimer/Store/AppSettings.swift` |
 | Worker colors | `Worker.color` in `WorkTimer/UI/LaneChart.swift` |
-| Timeline axis, lanes, lane styles, track, concurrency chart, week heat-map, multiplier badge | `WorkTimer/UI/LaneChart.swift` |
+| Timeline axis, lanes, lane styles, track, concurrency chart, hover line and card, week heat-map, multiplier badge | `WorkTimer/UI/LaneChart.swift` |
 | Totals cards, card fill colors, `cardBackground()` | `WorkTimer/UI/StatCard.swift` |
 | Live markers (breathing dot, dot slot, live edge) | `WorkTimer/UI/LiveIndicators.swift` |
 | Session editor, CSV export box, settings form | `WorkTimer/UI/SharedViews.swift` |
@@ -74,7 +74,8 @@ WORKTIMER_DATA_DIR=/path/to/scratch .build/debug/WorkTimer
 
 Debug builds also render their own windows to PNGs in the data folder when they receive the
 `com.omershaashua.worktimer.debugSnapshot` distributed notification (`userInfo` keys:
-`window=glance`, `grouping`, `period`, `step`, `filter`, `appearance`). Use it to check
+`window=glance`, `grouping`, `period`, `step`, `filter`, `hover` (0–1 along the timeline),
+`appearance`). Use it to check
 layout without Screen Recording permission.
 
 ## Conventions

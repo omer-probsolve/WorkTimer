@@ -43,12 +43,13 @@ final class DashboardWindowController: NSObject, NSWindowDelegate {
     }
 
     #if DEBUG
-    func debugConfigure(grouping: String?, period: String?, step: String?, filter: String?) {
+    func debugConfigure(grouping: String?, period: String?, step: String?, filter: String?, hover: String?) {
         show()
         if let filter { model.filter = Worker(rawValue: filter).map { .worker($0) } ?? .project(filter) }
         if let grouping, let value = DashboardModel.Grouping(rawValue: grouping) { model.grouping = value }
         if let period, let value = DashboardModel.Period(rawValue: period) { model.period = value }
         if let step, let value = Int(step) { model.step(value) }
+        model.hover = hover.flatMap(Double.init)
     }
     #endif
 

@@ -29,6 +29,11 @@ package enum Format {
         timeFormatter.string(from: date)
     }
 
+    /// "9:41", or "Mon 12 9:41" with `weekday` — a point on the timeline.
+    package static func instant(_ date: Date, weekday: Bool) -> String {
+        weekday ? "\(weekdayAndDay(date)) \(time(date))" : time(date)
+    }
+
     /// "Today", "Yesterday", or "Mon 12 Oct".
     package static func day(_ date: Date) -> String {
         let calendar = Calendar.current
