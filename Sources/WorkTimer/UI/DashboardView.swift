@@ -75,7 +75,7 @@ struct DashboardView: View {
                 content(now: context.date)
             }
         }
-        .frame(minWidth: 680, minHeight: 540)
+        .frame(minWidth: 680, minHeight: 700)
     }
 
     // MARK: - Toolbar
@@ -158,6 +158,7 @@ struct DashboardView: View {
         return VStack(alignment: .leading, spacing: 14) {
             laneChart(lanes, axis: axis, concurrency: log.metrics.concurrency(in: interval, now: now))
             cards(interval: interval, now: now, live: live)
+            heatmap(now: now)
             table(interval: interval, now: now)
         }
         .padding(16)
@@ -276,6 +277,30 @@ struct DashboardView: View {
                     onClear: { model.filter = nil }
                 ), onSelect: { model.toggle(.worker(worker)) })
             }
+        }
+    }
+
+    // MARK: - Heat map
+
+    /// When each worker works across the week, over all history: everyone, or
+    /// just what the cards or lanes are filtered to.
+    private func heatmap(now: Date) -> some View {
+        let layers: [WeekHeatmapView.Layer]
+        switch model.filter {
+        case .worker(let worker): layers = log.metrics.weekHeatmaps(worker: worker, now: now)
+        case .project(let name): layers = log.metrics.weekHeatmaps(project: name, now: now)
+        case nil: layers = log.metrics.weekHeatmaps(now: now)
+        }
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(filterTitle.map { "Hours of the week · \($0)" } ?? "Hours of the week")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .help("All time, added up across every week. Each stripe is shaded against that worker's busiest hour.")
+                Spacer()
+                WeekHeatmapView.Legend(workers: layers.map(\.worker))
+            }
+            WeekHeatmapView(layers: layers)
         }
     }
 

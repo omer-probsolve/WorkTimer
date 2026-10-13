@@ -27,14 +27,14 @@ final class DashboardWindowController: NSObject, NSWindowDelegate {
 
     private func makeWindow() -> NSWindow {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 780, height: 640),
+            contentRect: NSRect(x: 0, y: 0, width: 780, height: 780),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
         window.title = "Work Timer"
         window.contentViewController = NSHostingController(rootView: makeView(model))
-        window.setContentSize(NSSize(width: 780, height: 640))
+        window.setContentSize(NSSize(width: 780, height: 780))
         window.isReleasedWhenClosed = false
         window.delegate = self
         window.setFrameAutosaveName("Dashboard")

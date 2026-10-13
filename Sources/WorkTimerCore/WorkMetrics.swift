@@ -122,6 +122,18 @@ package struct WorkMetrics {
         sessionSpans(now: now).unionLength(in: interval)
     }
 
+    /// When each worker works across the week, over all history — one map per
+    /// worker, each shaded against its own busiest hour. Everyone by default;
+    /// one worker; or the agents that worked on one project. Agents count
+    /// wall-clock time: parallel sessions count once.
+    package func weekHeatmaps(worker: Worker? = nil, project: String? = nil, now: Date) -> [(worker: Worker, map: WeekHeatmap)] {
+        let segments = agentSegments(now: now).filter { project == nil || $0.project == project }
+        let workers = worker.map { [$0] } ?? (project == nil ? Worker.allCases : Worker.agents)
+        return workers.map { worker in
+            (worker, spans(for: worker, now: now, segments: segments).weekHeatmap())
+        }
+    }
+
     // MARK: - Multipliers
 
     /// Everything logged: your time plus every agent session's time.

@@ -11,6 +11,11 @@ extension Worker {
     }
 }
 
+extension Color {
+    /// The empty background of lanes and heat-map cells.
+    static let trackFill = Color.primary.opacity(0.06)
+}
+
 /// The time axis a chart is drawn against.
 struct ChartAxis {
     let range: DateInterval
@@ -19,7 +24,7 @@ struct ChartAxis {
     /// The empty track every lane is drawn on; later drawing is clipped to it.
     static func drawTrack(in context: inout GraphicsContext, size: CGSize) {
         let track = Path(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: 3)
-        context.fill(track, with: .color(.primary.opacity(0.06)))
+        context.fill(track, with: .color(.trackFill))
         context.clip(to: track)
     }
 
@@ -172,6 +177,109 @@ struct ConcurrencyBar: View {
             context.fill(path, with: .color(.secondary.opacity(0.5)))
         }
         .frame(height: height)
+    }
+}
+
+/// When work happens across the week: a row per day, Sunday first, and a
+/// column per hour. Each cell has a stripe per worker, shaded by how much of
+/// that worker's time falls in it.
+struct WeekHeatmapView: View {
+    typealias Layer = (worker: Worker, map: WeekHeatmap)
+
+    let layers: [Layer]
+
+    var body: some View {
+        // Taller cells when there are stripes to tell apart.
+        let cellHeight: CGFloat = layers.count > 1 ? 18 : 14
+        Grid(horizontalSpacing: 3, verticalSpacing: 3) {
+            ForEach(0..<7, id: \.self) { weekday in
+                GridRow {
+                    Text(Format.weekdaySymbol(weekday))
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .gridColumnAlignment(.leading)
+                        .padding(.trailing, 4)
+                    ForEach(0..<24, id: \.self) { hour in
+                        Stripes(colors: layers.map {
+                            Self.fill($0.map.level(weekday: weekday, hour: hour), color: $0.worker.color)
+                        }, cornerRadius: 3)
+                        .frame(minWidth: 8, maxWidth: .infinity, minHeight: cellHeight, maxHeight: cellHeight)
+                        .help(help(weekday: weekday, hour: hour))
+                    }
+                }
+            }
+            GridRow {
+                Color.clear.frame(width: 1, height: 1)
+                ForEach(0..<24, id: \.self) { hour in
+                    // Overlaid so a label wider than its cell doesn't widen the column.
+                    Color.clear
+                        .frame(maxWidth: .infinity, minHeight: 12, maxHeight: 12)
+                        .overlay(alignment: .leading) {
+                            if hour % 3 == 0 {
+                                Text(Format.hour(ofDay: hour))
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                                    .fixedSize()
+                            }
+                        }
+                }
+            }
+        }
+    }
+
+    private func help(weekday: Int, hour: Int) -> String {
+        let range = "\(Format.weekdaySymbol(weekday)) \(Format.hour(ofDay: hour)) – \(Format.hour(ofDay: (hour + 1) % 24))"
+        let times = layers.map { layer in
+            let time = Format.clock(layer.map.seconds[weekday][hour], seconds: false)
+            return layers.count > 1 ? "\(layer.worker.name) \(time)" : time
+        }
+        return ([range] + times).joined(separator: " · ")
+    }
+
+    /// Empty for level 0, otherwise `color` at one of four strengths.
+    static func fill(_ level: Int, color: Color) -> Color {
+        level == 0 ? .clear : color.opacity([0.3, 0.5, 0.75, 1][min(level, WeekHeatmap.levels) - 1])
+    }
+
+    /// Equal horizontal bands, top to bottom, on the empty track.
+    private struct Stripes: View {
+        let colors: [Color]
+        let cornerRadius: CGFloat
+
+        var body: some View {
+            VStack(spacing: 0) {
+                ForEach(colors.indices, id: \.self) { colors[$0] }
+            }
+            .background(Color.trackFill)
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+        }
+    }
+
+    /// Who each stripe is, then "Less ▢▢▢▢▢ More" in the same stripes.
+    struct Legend: View {
+        let workers: [Worker]
+
+        var body: some View {
+            HStack(spacing: 3) {
+                if workers.count > 1 {
+                    ForEach(workers) { worker in
+                        HStack(spacing: 4) {
+                            Circle().fill(worker.color).frame(width: 6, height: 6)
+                            Text(worker.name).foregroundStyle(worker.color)
+                        }
+                        .padding(.trailing, 6)
+                    }
+                }
+                Text("Less").padding(.trailing, 2)
+                ForEach(0...WeekHeatmap.levels, id: \.self) { level in
+                    Stripes(colors: workers.map { WeekHeatmapView.fill(level, color: $0.color) }, cornerRadius: 2)
+                        .frame(width: 10, height: 10)
+                }
+                Text("More").padding(.leading, 2)
+            }
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
+        }
     }
 }
 

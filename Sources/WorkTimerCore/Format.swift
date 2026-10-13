@@ -53,6 +53,16 @@ package enum Format {
         closingMidnight && uses24HourClock ? "24" : hourFormatter.string(from: date)
     }
 
+    /// "Sun" for 0 through "Sat" for 6, whatever day the week starts on.
+    package static func weekdaySymbol(_ index: Int) -> String {
+        weekdayFormatter.shortWeekdaySymbols[index]
+    }
+
+    /// "9" or "9 AM" for an hour of the day, 0–23.
+    package static func hour(ofDay hour: Int) -> String {
+        hourFormatter.string(from: Calendar.current.date(bySettingHour: hour, minute: 0, second: 0, of: Date())!)
+    }
+
     /// "11 – 17 Oct"
     package static func dateRange(_ interval: DateInterval) -> String {
         rangeFormatter.string(from: interval.start, to: interval.end.addingTimeInterval(-1))

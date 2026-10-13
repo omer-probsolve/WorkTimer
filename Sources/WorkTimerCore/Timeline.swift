@@ -51,3 +51,40 @@ extension DateInterval {
         Calendar.current.dateInterval(of: component, for: date)!
     }
 }
+
+/// Time covered in each hour of the week, added up over every week:
+/// `seconds[weekday][hour]`, where weekday 0 is Sunday and hour 0 is midnight.
+package struct WeekHeatmap: Equatable {
+    package static let levels = 4
+
+    package var seconds = Array(repeating: Array(repeating: TimeInterval(0), count: 24), count: 7)
+
+    package init() {}
+
+    package var peak: TimeInterval { seconds.joined().max() ?? 0 }
+
+    /// 0 for an empty hour, otherwise 1…`levels` relative to the busiest hour.
+    package func level(weekday: Int, hour: Int) -> Int {
+        let value = seconds[weekday][hour]
+        let peak = peak
+        guard value > 0, peak > 0 else { return 0 }
+        return Swift.min(Self.levels, Swift.max(1, Int((value / peak * Double(Self.levels)).rounded(.up))))
+    }
+}
+
+extension Array where Element == Span {
+    /// When these spans fall across the week; overlaps count once.
+    package func weekHeatmap(calendar: Calendar = .current) -> WeekHeatmap {
+        var map = WeekHeatmap()
+        for span in merged() {
+            var start = span.start
+            while start < span.end {
+                let end = Swift.min(calendar.dateInterval(of: .hour, for: start)!.end, span.end)
+                let parts = calendar.dateComponents([.weekday, .hour], from: start)
+                map.seconds[parts.weekday! - 1][parts.hour!] += end.timeIntervalSince(start)
+                start = end
+            }
+        }
+        return map
+    }
+}

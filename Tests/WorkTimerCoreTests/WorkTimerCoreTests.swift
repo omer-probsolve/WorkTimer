@@ -39,6 +39,25 @@ final class TimelineTests: XCTestCase {
         XCTAssertEqual(spans.merged(bridging: 60), [Span(start: at(0), end: at(180))])
     }
 
+    func testWeekHeatmapSplitsSpansAtHoursAndCountsOverlapOnce() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        // Sunday 2026-10-11, 9:30 to 11:15, plus an overlapping span.
+        let start = calendar.date(from: DateComponents(year: 2026, month: 10, day: 11, hour: 9, minute: 30))!
+        let spans = [
+            Span(start: start, end: start.addingTimeInterval(105 * 60)),
+            Span(start: start, end: start.addingTimeInterval(10 * 60)),
+        ]
+        let map = spans.weekHeatmap(calendar: calendar)
+        XCTAssertEqual(map.seconds[0][9], 30 * 60)
+        XCTAssertEqual(map.seconds[0][10], 60 * 60)
+        XCTAssertEqual(map.seconds[0][11], 15 * 60)
+        XCTAssertEqual(map.seconds.joined().reduce(0, +), 105 * 60)
+        XCTAssertEqual(map.level(weekday: 0, hour: 10), WeekHeatmap.levels)
+        XCTAssertEqual(map.level(weekday: 0, hour: 11), 1)
+        XCTAssertEqual(map.level(weekday: 1, hour: 10), 0)
+    }
+
     func testTimestampParsing() {
         XCTAssertEqual(LogScan.date("2026-10-12T11:10:28.250Z")?.timeIntervalSince1970 ?? 0, 1_791_803_428.25, accuracy: 0.001)
         XCTAssertNil(LogScan.date("not a date"))
@@ -150,6 +169,22 @@ final class WorkMetricsTests: XCTestCase {
         // (1h you + 3h Claude + 0.5h Codex) / 1h you
         XCTAssertEqual(metrics.leverage(in: range, now: now) ?? 0, 4.5, accuracy: 0.001)
         XCTAssertEqual(metrics.concurrency(in: range, now: now).map(\.count).max(), 5)
+    }
+
+    func testWeekHeatmapsHaveOneMapPerWorkerWithParallelSessionsCountedOnce() {
+        let metrics = WorkMetrics(
+            log: SessionLog(),
+            segments: [segment("a", 0, 3600), segment("b", 0, 3600), segment("x", 0, 1800, .codex)],
+            trackingStart: at(-86_400)
+        )
+        let now = at(10_000)
+        let total = { (map: WeekHeatmap) in map.seconds.joined().reduce(0, +) }
+        let everyone = metrics.weekHeatmaps(now: now)
+        XCTAssertEqual(everyone.map(\.worker), Worker.allCases)
+        XCTAssertEqual(everyone.map { total($0.map) }, [0, 3600, 1800])
+        XCTAssertEqual(metrics.weekHeatmaps(project: "p", now: now).map(\.worker), Worker.agents)
+        XCTAssertEqual(metrics.weekHeatmaps(project: "other", now: now).map { total($0.map) }, [0, 0])
+        XCTAssertEqual(metrics.weekHeatmaps(worker: .codex, now: now).map(\.worker), [.codex])
     }
 
     func testLeverageNeedsYourTime() {

@@ -47,6 +47,10 @@ A menu bar app for logging work time on macOS 14+.
 
 ## Build & install
 
+There's no downloadable build yet, so build it from source (needs Xcode or the Swift
+toolchain). If you'd like a signed download instead,
+[open an issue](https://github.com/omer-probsolve/WorkTimer/issues) and I'll add one.
+
 ```bash
 ./install.sh     # builds, copies to /Applications, launches
 ./build.sh       # just builds dist/Work Timer.app

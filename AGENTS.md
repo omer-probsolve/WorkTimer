@@ -22,6 +22,7 @@ everywhere it's needed.
 |---|---|
 | Time spans, unions, sums, merging | `WorkTimerCore/Timeline.swift` (`Span`, `[Span]` helpers) |
 | Day / week / hour ranges | `DateInterval.of(_:containing:)` in `WorkTimerCore/Timeline.swift` |
+| Time per weekday × hour, and its shading levels | `WeekHeatmap`, `[Span].weekHeatmap()` in `WorkTimerCore/Timeline.swift` |
 | Your sessions: rules, edits, validation, your time, CSV, the `sessions.json` format | `WorkTimerCore/SessionLog.swift` |
 | Agent transcript parsing, turn rules, the 5-minute silence rule | `WorkTimerCore/AgentLog.swift` (`AgentLogState`) |
 | Finding and reading transcripts, the parse cache | `WorkTimerCore/TranscriptScanner.swift` |
@@ -35,7 +36,7 @@ everywhere it's needed.
 | Data folder location | `WorkTimer/Store/AppPaths.swift` |
 | Preferences | `WorkTimer/Store/AppSettings.swift` |
 | Worker colors | `Worker.color` in `WorkTimer/UI/LaneChart.swift` |
-| Timeline axis, lanes, lane styles, track, concurrency chart, multiplier badge | `WorkTimer/UI/LaneChart.swift` |
+| Timeline axis, lanes, lane styles, track, concurrency chart, week heat-map, multiplier badge | `WorkTimer/UI/LaneChart.swift` |
 | Totals cards, card fill colors, `cardBackground()` | `WorkTimer/UI/StatCard.swift` |
 | Live markers (breathing dot, dot slot, live edge) | `WorkTimer/UI/LiveIndicators.swift` |
 | Session editor, CSV export box, settings form | `WorkTimer/UI/SharedViews.swift` |
