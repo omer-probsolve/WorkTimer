@@ -1,4 +1,5 @@
 import AppKit
+import WorkTimerCore
 
 /// Decides when to clock in and out automatically.
 ///
@@ -165,7 +166,7 @@ final class TimeTracker {
         )
     }
 
-    private func notifyAutoStop(_ result: SessionStore.StopResult) {
+    private func notifyAutoStop(_ result: SessionLog.StopResult) {
         guard settings.notificationsEnabled else { return }
         let idle = "No activity for \(settings.idleMinutes) min"
         var body: String

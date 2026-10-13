@@ -1,4 +1,5 @@
 import SwiftUI
+import WorkTimerCore
 
 /// The at-a-glance window under the menu bar icon.
 struct GlanceView: View {
@@ -15,9 +16,9 @@ struct GlanceView: View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             let now = context.date
             let today = DateInterval.of(.day, containing: now)
-            let sessionStart = log.currentSessionStart(now: now)
-            let running = log.running(now: now)
-            let live = log.liveWorkers(now: now)
+            let sessionStart = log.metrics.currentSessionStart(now: now)
+            let running = log.metrics.running(now: now)
+            let live = log.metrics.liveWorkers(now: now)
 
             VStack(alignment: .leading, spacing: 10) {
                 header(sessionStart: sessionStart)
@@ -76,14 +77,14 @@ struct GlanceView: View {
     private func clock(sessionStart: Date?, today: DateInterval, now: Date) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: 8) {
-                Text(Format.clock(sessionStart.map { now.timeIntervalSince($0) } ?? log.sessionTotal(in: today, now: now)))
+                Text(Format.clock(sessionStart.map { now.timeIntervalSince($0) } ?? log.metrics.sessionTotal(in: today, now: now)))
                     .font(.system(size: 36, weight: .light, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(sessionStart == nil ? .secondary : .primary)
-                MultiplierBadge(value: log.leverage(in: today, now: now))
+                MultiplierBadge(value: log.metrics.leverage(in: today, now: now))
                     .help(Explain.leverage)
             }
-            Text("\(Format.clock(log.totalWork(in: today, now: now), seconds: false)) of work today")
+            Text("\(Format.clock(log.metrics.totalWork(in: today, now: now), seconds: false)) of work today")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
@@ -93,14 +94,14 @@ struct GlanceView: View {
 
     /// One slim lane per worker plus the session, like the dashboard's.
     private func lanes(today: DateInterval, now: Date, live: Set<Worker>) -> some View {
-        let segments = log.agentSegments(now: now)
+        let segments = log.metrics.agentSegments(now: now)
         let axis = ChartAxis.day(now, startMinute: settings.timelineStartMinute, endMinute: settings.timelineEndMinute)
         return Grid(alignment: .leading, horizontalSpacing: 6, verticalSpacing: 4) {
             lane("Session", color: .secondary, live: false, axis: axis,
-                 layers: [.session(log.sessionSpans(now: now))])
+                 layers: [.session(log.metrics.sessionSpans(now: now))])
             ForEach(Worker.allCases) { worker in
                 lane(worker.name, color: worker.color, live: live.contains(worker), axis: axis,
-                     layers: [.worker(worker, log.spans(for: worker, now: now, segments: segments))],
+                     layers: [.worker(worker, log.metrics.spans(for: worker, now: now, segments: segments))],
                      showOverlap: worker != .you)
             }
             GridRow {
@@ -124,13 +125,13 @@ struct GlanceView: View {
 
     private func card(_ worker: Worker, today: DateInterval, now: Date, live: Bool) -> some View {
         StatCard(
-            title: worker.name, color: worker.color, value: log.total(worker, in: today, now: now),
-            subtitle: log.agentSummary(worker, in: today, now: now, compact: true),
+            title: worker.name, color: worker.color, value: log.metrics.total(worker, in: today, now: now),
+            subtitle: log.metrics.agentSummary(worker, in: today, now: now, compact: true),
             subtitleHelp: Explain.agent(worker), live: live, size: .compact
         )
     }
 
-    private func runningList(_ running: [WorkLog.RunningAgent], now: Date) -> some View {
+    private func runningList(_ running: [WorkMetrics.RunningAgent], now: Date) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(running.isEmpty ? "No agents running" : "Running now · \(running.count)")
                 .font(.caption.weight(.semibold))

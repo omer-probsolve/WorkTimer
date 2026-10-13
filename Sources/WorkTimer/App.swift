@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import WorkTimerCore
 
 @main
 enum WorkTimerApp {
@@ -27,21 +28,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         store = SessionStore()
         let trackingStart = agentTrackingStart()
-        agents = AgentMonitor(cutoff: WorkLog.agentCutoff(store: store, trackingStart: trackingStart))
+        agents = AgentMonitor(cutoff: WorkMetrics.agentCutoff(log: store.log, trackingStart: trackingStart))
         log = WorkLog(store: store, agents: agents, trackingStart: trackingStart)
         tracker = TimeTracker(store: store, settings: settings, notifier: notifier)
         tracker.runningAgents = { [weak self] in
             guard let self else { return [] }
-            return Set(self.log.running(now: Date()).map(\.worker.name)).sorted()
+            return Set(self.log.metrics.running(now: Date()).map(\.worker.name)).sorted()
         }
         dashboard = DashboardWindowController(log: log, store: store, settings: settings)
         statusItem = StatusItemController(log: log, settings: settings, tracker: tracker, dashboard: dashboard)
 
         // Editing a session onto an earlier day makes that day's agent work count.
-        store.$sessions
+        store.$log
             .sink { [weak self] _ in
                 guard let self else { return }
-                self.agents.extendCutoff(to: WorkLog.agentCutoff(store: self.store, trackingStart: trackingStart))
+                self.agents.extendCutoff(to: WorkMetrics.agentCutoff(log: self.store.log, trackingStart: trackingStart))
             }
             .store(in: &cancellables)
         agents.start()

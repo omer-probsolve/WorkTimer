@@ -51,6 +51,9 @@ A menu bar app for logging work time on macOS 14+.
 ./build.sh       # just builds dist/Work Timer.app
 ```
 
+The logic lives in the `WorkTimerCore` library (Foundation only, shareable with other
+platforms); the macOS app is the `WorkTimer` target. Run its tests with `swift test`.
+
 No special permissions are needed: idle time comes from the system's input-idle counter,
 and the shortcuts use the Carbon hotkey API. macOS asks once to allow notifications.
 

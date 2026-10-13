@@ -1,4 +1,5 @@
 import SwiftUI
+import WorkTimerCore
 
 final class DashboardModel: ObservableObject {
     enum Grouping: String, CaseIterable, Identifiable {
@@ -147,15 +148,15 @@ struct DashboardView: View {
 
     private func content(now: Date) -> some View {
         let interval = model.interval
-        let segments = log.agentSegments(now: now)
+        let segments = log.metrics.agentSegments(now: now)
         let axis = model.period == .day
             ? ChartAxis.day(model.anchor, startMinute: settings.timelineStartMinute, endMinute: settings.timelineEndMinute)
             : ChartAxis.week(interval)
-        let live: Set<Worker> = interval.contains(now) ? log.liveWorkers(now: now) : []
+        let live: Set<Worker> = interval.contains(now) ? log.metrics.liveWorkers(now: now) : []
         let lanes = lanes(interval: interval, now: now, segments: segments, live: live)
 
         return VStack(alignment: .leading, spacing: 14) {
-            laneChart(lanes, axis: axis, concurrency: log.concurrency(in: interval, now: now))
+            laneChart(lanes, axis: axis, concurrency: log.metrics.concurrency(in: interval, now: now))
             cards(interval: interval, now: now, live: live)
             table(interval: interval, now: now)
         }
@@ -165,11 +166,11 @@ struct DashboardView: View {
     private func lanes(interval: DateInterval, now: Date, segments: [AgentSegment], live: Set<Worker>) -> [Lane] {
         switch model.grouping {
         case .workers:
-            let session = log.sessionSpans(now: now)
+            let session = log.metrics.sessionSpans(now: now)
             return [Lane(id: "session", filter: nil, title: "Session", total: session.unionLength(in: interval),
                          layers: [.session(session)])]
                 + Worker.allCases.map { worker in
-                    let spans = log.spans(for: worker, now: now, segments: segments)
+                    let spans = log.metrics.spans(for: worker, now: now, segments: segments)
                     return Lane(id: worker.rawValue, filter: .worker(worker), title: worker.name,
                                 total: spans.unionLength(in: interval),
                                 layers: [.worker(worker, spans)],
@@ -177,7 +178,7 @@ struct DashboardView: View {
                                 liveColor: live.contains(worker) ? worker.color : nil)
                 }
         case .projects:
-            return log.projects(in: interval, now: now).map { project in
+            return log.metrics.projects(in: interval, now: now).map { project in
                 let mine = segments.filter { $0.project == project.name }
                 return Lane(
                     id: project.name, filter: .project(project.name), title: project.name, total: project.wallClock,
@@ -260,16 +261,16 @@ struct DashboardView: View {
     private func cards(interval: DateInterval, now: Date, live: Set<Worker>) -> some View {
         HStack(spacing: 10) {
             FilterCard(card: StatCard(
-                title: "Session", color: .secondary, value: log.sessionTotal(in: interval, now: now),
-                badge: .some(log.leverage(in: interval, now: now)),
-                subtitle: "\(Format.clock(log.totalWork(in: interval, now: now), seconds: false)) of work",
+                title: "Session", color: .secondary, value: log.metrics.sessionTotal(in: interval, now: now),
+                badge: .some(log.metrics.leverage(in: interval, now: now)),
+                subtitle: "\(Format.clock(log.metrics.totalWork(in: interval, now: now), seconds: false)) of work",
                 subtitleHelp: Explain.leverage,
                 selected: model.filter == nil
             ), onSelect: { model.filter = nil })
             ForEach(Worker.allCases) { worker in
                 FilterCard(card: StatCard(
-                    title: worker.name, color: worker.color, value: log.total(worker, in: interval, now: now),
-                    subtitle: log.agentSummary(worker, in: interval, now: now, compact: false),
+                    title: worker.name, color: worker.color, value: log.metrics.total(worker, in: interval, now: now),
+                    subtitle: log.metrics.agentSummary(worker, in: interval, now: now, compact: false),
                     subtitleHelp: Explain.agent(worker),
                     live: live.contains(worker), selected: model.filter == .worker(worker),
                     onClear: { model.filter = nil }
@@ -281,7 +282,7 @@ struct DashboardView: View {
     // MARK: - Table
 
     private func table(interval: DateInterval, now: Date) -> some View {
-        let entries = log.entries(in: interval, now: now).filter(matchesSelection)
+        let entries = log.metrics.entries(in: interval, now: now).filter(matchesSelection)
         return VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text(filterTitle.map { "Sessions · \($0)" } ?? "Sessions")
@@ -325,7 +326,7 @@ struct DashboardView: View {
         }
     }
 
-    private func matchesSelection(_ entry: WorkLog.Entry) -> Bool {
+    private func matchesSelection(_ entry: WorkMetrics.Entry) -> Bool {
         switch model.filter {
         case .worker(let worker): return entry.worker == worker
         case .project(let name): return entry.project == name
@@ -335,7 +336,7 @@ struct DashboardView: View {
 }
 
 private struct EntryRow: View {
-    let entry: WorkLog.Entry
+    let entry: WorkMetrics.Entry
     let store: SessionStore
     let showDay: Bool
     let now: Date

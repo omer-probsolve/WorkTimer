@@ -1,11 +1,11 @@
 import Foundation
 
-enum Worker: String, Codable, CaseIterable, Identifiable {
+package enum Worker: String, Codable, CaseIterable, Identifiable {
     case you, claude, codex
 
-    var id: Self { self }
+    package var id: Self { self }
 
-    var name: String {
+    package var name: String {
         switch self {
         case .you: return "You"
         case .claude: return "Claude"
@@ -13,7 +13,7 @@ enum Worker: String, Codable, CaseIterable, Identifiable {
         }
     }
 
-    static let agents: [Worker] = [.claude, .codex]
+    package static let agents: [Worker] = [.claude, .codex]
 }
 
 /// What one agent transcript file says about when its agent was working.
@@ -25,37 +25,37 @@ enum Worker: String, Codable, CaseIterable, Identifiable {
 /// A turn runs from the user's prompt to the agent's final answer. Inside a turn,
 /// a silence longer than `maxSilence` is treated as the agent waiting on you (a
 /// permission prompt, say) and isn't counted.
-struct AgentLogState: Codable {
-    static let maxSilence: TimeInterval = 5 * 60
+package struct AgentLogState: Codable {
+    package static let maxSilence: TimeInterval = 5 * 60
 
-    var worker: Worker
-    var fileSize: UInt64 = 0
-    var modified: Date = .distantPast
-    var offset: UInt64 = 0
+    package var worker: Worker
+    package var fileSize: UInt64 = 0
+    package var modified: Date = .distantPast
+    package var offset: UInt64 = 0
     /// Subagent transcripts — their time is already covered by the parent session.
-    var ignored = false
+    package var ignored = false
 
-    var sessionID: String?
-    var cwd: String?
-    var source: String?
+    package var sessionID: String?
+    package var cwd: String?
+    package var source: String?
 
-    var turnOpen = false
+    package var turnOpen = false
     /// The agent gave its final answer; the turn ends once the answer finishes
     /// streaming, which the next bookkeeping record marks.
-    var turnEnding = false
-    var segmentStart: Date?
-    var lastActivity: Date?
-    var segments: [Span] = []
+    package var turnEnding = false
+    package var segmentStart: Date?
+    package var lastActivity: Date?
+    package var segments: [Span] = []
 
-    init(worker: Worker) {
+    package init(worker: Worker) {
         self.worker = worker
     }
 
     /// The turn is still in progress, so the agent may be working right now.
-    var isLive: Bool { turnOpen && !turnEnding }
+    package var isLive: Bool { turnOpen && !turnEnding }
 
     /// Finished segments plus the open one, which ends at the last activity seen.
-    var allSegments: [Span] {
+    package var allSegments: [Span] {
         guard turnOpen, let start = segmentStart, let last = lastActivity else { return segments }
         return segments + [Span(start: start, end: last)]
     }
@@ -99,7 +99,7 @@ struct AgentLogState: Codable {
 
     // MARK: - Lines
 
-    mutating func consume(line: Data) {
+    package mutating func consume(line: Data) {
         guard !ignored, !line.isEmpty else { return }
         switch worker {
         case .claude: consumeClaude(line)
@@ -207,17 +207,17 @@ struct AgentLogState: Codable {
 }
 
 /// Byte-level helpers for reading JSONL without decoding every line.
-enum LogScan {
+package enum LogScan {
     private static let leadingPrefix = Array("{\"timestamp\":\"".utf8)
     private static let timestampKey = Data("\"timestamp\":\"".utf8)
 
-    static let sessionMeta = Data("\"type\":\"session_meta\"".utf8)
-    static let taskStarted = Data("\"type\":\"task_started\"".utf8)
-    static let taskComplete = Data("\"type\":\"task_complete\"".utf8)
-    static let turnAborted = Data("\"type\":\"turn_aborted\"".utf8)
+    package static let sessionMeta = Data("\"type\":\"session_meta\"".utf8)
+    package static let taskStarted = Data("\"type\":\"task_started\"".utf8)
+    package static let taskComplete = Data("\"type\":\"task_complete\"".utf8)
+    package static let turnAborted = Data("\"type\":\"turn_aborted\"".utf8)
 
     /// Codex lines start with `{"timestamp":"2026-10-12T11:10:28.253Z"`.
-    static func leadingTimestamp(in line: Data) -> Date? {
+    package static func leadingTimestamp(in line: Data) -> Date? {
         guard line.count > leadingPrefix.count + 20, line.starts(with: leadingPrefix) else { return nil }
         let start = line.startIndex + leadingPrefix.count
         return date(line[start ..< min(start + 30, line.endIndex)])
@@ -225,18 +225,18 @@ enum LogScan {
 
     /// The last `"timestamp":"…"` in a line, which for Claude transcripts is the
     /// top-level one: it follows the (possibly huge) message.
-    static func lastTimestamp(in line: Data) -> Date? {
+    package static func lastTimestamp(in line: Data) -> Date? {
         guard let range = line.range(of: timestampKey, options: .backwards) else { return nil }
         return date(line[range.upperBound ..< min(range.upperBound + 30, line.endIndex)])
     }
 
-    static func date(_ string: String) -> Date? {
+    package static func date(_ string: String) -> Date? {
         date(Data(string.utf8))
     }
 
     /// Parses `YYYY-MM-DDTHH:MM:SS(.fff)Z` (UTC) — much faster than a formatter,
     /// which matters for millions of lines.
-    static func date(_ bytes: Data) -> Date? {
+    package static func date(_ bytes: Data) -> Date? {
         let b = Array(bytes.prefix(30))
         guard b.count >= 20 else { return nil }
         func number(_ from: Int, _ count: Int) -> Int? {
@@ -269,7 +269,11 @@ enum LogScan {
         parts.tm_hour = Int32(hour)
         parts.tm_min = Int32(minute)
         parts.tm_sec = Int32(second)
+        #if os(Windows)
+        let seconds = _mkgmtime(&parts)
+        #else
         let seconds = timegm(&parts)
+        #endif
         guard seconds != -1 else { return nil }
         return Date(timeIntervalSince1970: TimeInterval(seconds) + fraction)
     }

@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import WorkTimerCore
 
 /// The dashboard window. While it's open the app shows in the Dock and the app
 /// switcher, so the window can't get lost behind others.

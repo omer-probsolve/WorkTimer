@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import SwiftUI
+import WorkTimerCore
 
 /// The menu bar item: shows the running timer, opens the window on click and a
 /// quick menu on right-click.
@@ -135,7 +136,7 @@ final class StatusItemController: NSObject, NSWindowDelegate {
     private func refresh() {
         guard let button = statusItem.button else { return }
         let now = Date()
-        let sessionStart = log.currentSessionStart(now: now)
+        let sessionStart = log.metrics.currentSessionStart(now: now)
         let running = sessionStart != nil
         let symbol: String
         if store.isRunning {

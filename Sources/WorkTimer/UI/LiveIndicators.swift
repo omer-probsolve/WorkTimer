@@ -1,4 +1,5 @@
 import SwiftUI
+import WorkTimerCore
 
 /// A dot with a ring that keeps rippling outward: "working right now".
 ///

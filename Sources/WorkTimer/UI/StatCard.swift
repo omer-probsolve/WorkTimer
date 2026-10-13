@@ -1,25 +1,5 @@
 import SwiftUI
-
-/// Tooltips explaining the numbers, shared by the popover and the dashboard.
-enum Explain {
-    static let leverage = "Work logged per hour of your time: you plus every agent session, divided by your time"
-
-    static func agent(_ worker: Worker) -> String {
-        "Agent-hours (parallel sessions each count) · sessions running at once, on average, while \(worker.name) worked"
-    }
-}
-
-extension WorkLog {
-    /// An agent card's second line: agent-hours, then the parallelism multiplier.
-    /// Compact: "× 1:53 · 1.2×"; regular: "1:53 agent-hours · 1.2×".
-    func agentSummary(_ worker: Worker, in interval: DateInterval, now: Date, compact: Bool) -> String? {
-        guard worker != .you else { return nil }
-        let clock = Format.clock(agentHours(worker, in: interval, now: now), seconds: false)
-        let hours = compact ? "× \(clock)" : "\(clock) agent-hours"
-        guard let parallel = parallelism(worker, in: interval, now: now) else { return hours }
-        return "\(hours) · \(Format.multiplier(parallel))"
-    }
-}
+import WorkTimerCore
 
 extension Color {
     /// The quiet fill behind cards, badges and hovered rows.

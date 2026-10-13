@@ -1,4 +1,5 @@
 import SwiftUI
+import WorkTimerCore
 
 extension Worker {
     var color: Color {

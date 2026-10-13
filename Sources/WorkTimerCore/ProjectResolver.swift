@@ -2,11 +2,11 @@ import Foundation
 
 /// Turns an agent's working directory into a project name: the git repository it
 /// belongs to, so a worktree counts under its main repo.
-enum ProjectResolver {
+package enum ProjectResolver {
     private static var cache: [String: String] = [:]
     private static let lock = NSLock()
 
-    static func name(for cwd: String?) -> String {
+    package static func name(for cwd: String?) -> String {
         guard let cwd, !cwd.isEmpty else { return "Unknown" }
         lock.lock()
         defer { lock.unlock() }

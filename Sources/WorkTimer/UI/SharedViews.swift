@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import WorkTimerCore
 
 struct SessionEditor: View {
     enum Target {
@@ -72,7 +73,7 @@ struct SessionEditor: View {
         .background(RoundedRectangle(cornerRadius: 6).fill(Color.accentColor.opacity(0.08)))
     }
 
-    private func validate(end: Date, now: Date) -> SessionStore.EditError? {
+    private func validate(end: Date, now: Date) -> SessionLog.EditError? {
         switch target {
         case .running: return store.validateEdit(id: nil, start: start, end: now, now: now)
         case let .finished(session): return store.validateEdit(id: session.id, start: start, end: end, now: now)
