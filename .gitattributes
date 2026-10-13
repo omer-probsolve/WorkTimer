@@ -1,0 +1,11 @@
+# Keep LF line endings in every checkout, including Windows with core.autocrlf=true,
+# so shell scripts run and diffs don't show every line as changed.
+* text=auto eol=lf
+
+*.sh     text eol=lf
+*.swift  text eol=lf diff=swift
+
+*.png    binary
+*.jpg    binary
+*.icns   binary
+*.pdf    binary
