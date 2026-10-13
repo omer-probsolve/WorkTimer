@@ -17,14 +17,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let settings = AppSettings()
     private let notifier = Notifier()
     private var store: SessionStore!
+    private var agents: AgentMonitor!
+    private var log: WorkLog!
     private var tracker: TimeTracker!
+    private var dashboard: DashboardWindowController!
     private var statusItem: StatusItemController!
     private var cancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         store = SessionStore()
+        let trackingStart = agentTrackingStart()
+        agents = AgentMonitor(cutoff: WorkLog.agentCutoff(store: store, trackingStart: trackingStart))
+        log = WorkLog(store: store, agents: agents, trackingStart: trackingStart)
         tracker = TimeTracker(store: store, settings: settings, notifier: notifier)
-        statusItem = StatusItemController(store: store, settings: settings, tracker: tracker)
+        tracker.runningAgents = { [weak self] in
+            guard let self else { return [] }
+            return Set(self.log.running(now: Date()).map(\.worker.name)).sorted()
+        }
+        dashboard = DashboardWindowController(log: log, store: store, settings: settings)
+        statusItem = StatusItemController(log: log, settings: settings, tracker: tracker, dashboard: dashboard)
+
+        // Editing a session onto an earlier day makes that day's agent work count.
+        store.$sessions
+            .sink { [weak self] _ in
+                guard let self else { return }
+                self.agents.extendCutoff(to: WorkLog.agentCutoff(store: self.store, trackingStart: trackingStart))
+            }
+            .store(in: &cancellables)
+        agents.start()
 
         notifier.onAction = { [weak self] action, sessionID in
             self?.handleNotificationAction(action, sessionID: sessionID)
@@ -48,16 +68,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return false
     }
 
-    /// Lets other tools (Shortcuts, Raycast, a shell script) open the window:
-    /// post the `…showPanel` distributed notification.
+    /// Lets other tools (Shortcuts, Raycast, a shell script) open the windows:
+    /// post the `…showPanel` or `…showDashboard` distributed notification.
     private func observeExternalTrigger() {
-        DistributedNotificationCenter.default().addObserver(
+        let center = DistributedNotificationCenter.default()
+        center.addObserver(
             forName: Notification.Name("com.omershaashua.worktimer.showPanel"),
             object: nil,
             queue: .main
         ) { [weak self] _ in
             self?.statusItem.showPopover()
         }
+        center.addObserver(
+            forName: Notification.Name("com.omershaashua.worktimer.showDashboard"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.dashboard.show()
+        }
+        #if DEBUG
+        // Renders the app's own windows to PNGs in the data folder — for checking
+        // layout without Screen Recording permission.
+        center.addObserver(
+            forName: Notification.Name("com.omershaashua.worktimer.debugSnapshot"),
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            let info = note.userInfo as? [String: String] ?? [:]
+            if let appearance = info["appearance"] {
+                NSApp.appearance = NSAppearance(named: appearance == "dark" ? .darkAqua : .aqua)
+            }
+            if info["window"] == "glance" {
+                self?.statusItem.showPopover()
+            } else {
+                self?.dashboard.debugConfigure(grouping: info["grouping"], period: info["period"], step: info["step"], filter: info["filter"])
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                for window in NSApp.windows where window.isVisible {
+                    let index = (window is NSPanel ? "glance" : "dashboard-\(info["grouping"] ?? "")-\(info["filter"] ?? "")") + "-\(info["appearance"] ?? "light")"
+                    guard let view = window.contentView, view.bounds.width > 100,
+                          let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { continue }
+                    view.cacheDisplay(in: view.bounds, to: rep)
+                    let url = AppPaths.dataDirectory.appendingPathComponent("snapshot-\(index).png")
+                    try? rep.representation(using: .png, properties: [:])?.write(to: url)
+                }
+            }
+        }
+        #endif
     }
 
     private func registerHotKeys() {
@@ -93,6 +150,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .countIdleTime:
             if let sessionID { tracker.countIdleTime(sessionID: sessionID) }
         }
+    }
+
+    /// The day agent tracking was added. Agent work from before it only shows on
+    /// days you logged time yourself.
+    private func agentTrackingStart() -> Date {
+        let key = "agentTrackingStart"
+        if let date = UserDefaults.standard.object(forKey: key) as? Date { return date }
+        let today = Calendar.current.startOfDay(for: Date())
+        UserDefaults.standard.set(today, forKey: key)
+        return today
     }
 
     /// Auto clock-in only works if the app is running, so register the login item

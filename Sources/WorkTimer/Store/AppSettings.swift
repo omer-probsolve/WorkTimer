@@ -41,6 +41,28 @@ final class AppSettings: ObservableObject {
         didSet { store(toggleTimerShortcut, forKey: Keys.timerShortcut) }
     }
 
+    /// The part of the day the timelines show, in minutes after midnight. The end
+    /// minute is included: 0…1439 is the whole day.
+    @Published var timelineStartMinute: Int {
+        didSet {
+            let clamped = min(max(timelineStartMinute, 0), Self.lastMinute - 1)
+            if clamped != timelineStartMinute { timelineStartMinute = clamped; return }
+            defaults.set(timelineStartMinute, forKey: Keys.timelineStart)
+            if timelineEndMinute <= timelineStartMinute { timelineEndMinute = timelineStartMinute + 1 }
+        }
+    }
+
+    @Published var timelineEndMinute: Int {
+        didSet {
+            let clamped = min(max(timelineEndMinute, 1), Self.lastMinute)
+            if clamped != timelineEndMinute { timelineEndMinute = clamped; return }
+            defaults.set(timelineEndMinute, forKey: Keys.timelineEnd)
+            if timelineStartMinute >= timelineEndMinute { timelineStartMinute = timelineEndMinute - 1 }
+        }
+    }
+
+    static let lastMinute = 24 * 60 - 1
+
     /// Shortcuts that another app already owns. Not persisted.
     @Published var conflictingShortcuts: Set<HotKeyManager.Action> = []
 
@@ -53,12 +75,16 @@ final class AppSettings: ObservableObject {
             Keys.idleMinutes: 10,
             Keys.notifications: true,
             Keys.showSeconds: true,
+            Keys.timelineStart: 0,
+            Keys.timelineEnd: Self.lastMinute,
         ])
         autoClockIn = defaults.bool(forKey: Keys.autoClockIn)
         autoClockOut = defaults.bool(forKey: Keys.autoClockOut)
         idleMinutes = defaults.integer(forKey: Keys.idleMinutes)
         notificationsEnabled = defaults.bool(forKey: Keys.notifications)
         showSecondsInMenuBar = defaults.bool(forKey: Keys.showSeconds)
+        timelineStartMinute = defaults.integer(forKey: Keys.timelineStart)
+        timelineEndMinute = defaults.integer(forKey: Keys.timelineEnd)
         togglePanelShortcut = Self.loadShortcut(Keys.panelShortcut, default: KeyCombo(
             keyCode: UInt32(kVK_ANSI_T), modifiers: UInt32(controlKey | optionKey), key: "T"
         ))
@@ -84,6 +110,8 @@ final class AppSettings: ObservableObject {
         static let idleMinutes = "idleMinutes"
         static let notifications = "notificationsEnabled"
         static let showSeconds = "showSecondsInMenuBar"
+        static let timelineStart = "timelineStartMinute"
+        static let timelineEnd = "timelineEndMinute"
         static let panelShortcut = "togglePanelShortcut"
         static let timerShortcut = "toggleTimerShortcut"
     }

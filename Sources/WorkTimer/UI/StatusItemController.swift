@@ -13,16 +13,20 @@ final class StatusItemController: NSObject, NSWindowDelegate {
     private lazy var panel: NSPanel = makePanel()
     /// When the panel last hid itself because focus moved away.
     private var lastAutoHide = Date.distantPast
+    private let log: WorkLog
     private let store: SessionStore
     private let settings: AppSettings
     private let tracker: TimeTracker
+    private let dashboard: DashboardWindowController
     private var refreshTimer: Timer?
     private var cancellables = Set<AnyCancellable>()
 
-    init(store: SessionStore, settings: AppSettings, tracker: TimeTracker) {
-        self.store = store
+    init(log: WorkLog, settings: AppSettings, tracker: TimeTracker, dashboard: DashboardWindowController) {
+        self.log = log
+        self.store = log.store
         self.settings = settings
         self.tracker = tracker
+        self.dashboard = dashboard
         super.init()
 
         if let button = statusItem.button {
@@ -33,7 +37,7 @@ final class StatusItemController: NSObject, NSWindowDelegate {
         }
 
         // Defer to the next runloop pass: objectWillChange fires before the value changes.
-        Publishers.Merge(store.objectWillChange, settings.objectWillChange)
+        Publishers.Merge(log.objectWillChange, settings.objectWillChange)
             .receive(on: RunLoop.main)
             .sink { [weak self] in self?.refresh() }
             .store(in: &cancellables)
@@ -91,9 +95,13 @@ final class StatusItemController: NSObject, NSWindowDelegate {
 
     private func makePanel() -> NSPanel {
         let hosting = NSHostingController(
-            rootView: PopoverView(store: store, settings: settings, tracker: tracker)
+            rootView: GlanceView(log: log, store: store, settings: settings, tracker: tracker) { [weak self] showSettings in
+                self?.panel.orderOut(nil)
+                self?.dashboard.show(settings: showSettings)
+            }
         )
         let panel = NSPanel(contentViewController: hosting)
+        panel.setContentSize(GlanceView.size)
         panel.styleMask = [.titled, .closable, .fullSizeContentView]
         panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
@@ -126,10 +134,15 @@ final class StatusItemController: NSObject, NSWindowDelegate {
 
     private func refresh() {
         guard let button = statusItem.button else { return }
-        let running = store.isRunning
+        let now = Date()
+        let sessionStart = log.currentSessionStart(now: now)
+        let running = sessionStart != nil
         let symbol: String
-        if running {
+        if store.isRunning {
             symbol = "timer"
+        } else if running {
+            // Only agents are working.
+            symbol = "sparkles"
         } else if settings.autoClockIn {
             symbol = "clock"
         } else {
@@ -142,8 +155,8 @@ final class StatusItemController: NSObject, NSWindowDelegate {
             button.image = image
         }
 
-        if running {
-            let text = " " + Format.clock(store.elapsed(now: Date()), seconds: settings.showSecondsInMenuBar)
+        if let sessionStart {
+            let text = " " + Format.clock(now.timeIntervalSince(sessionStart), seconds: settings.showSecondsInMenuBar)
             button.attributedTitle = NSAttributedString(string: text, attributes: [
                 .font: NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular),
             ])
@@ -152,7 +165,7 @@ final class StatusItemController: NSObject, NSWindowDelegate {
         }
 
         let shortcut = settings.togglePanelShortcut.map { " — \($0.displayString)" } ?? ""
-        button.toolTip = (running ? "Work Timer: tracking" : settings.autoClockIn ? "Work Timer: not tracking" : "Work Timer: auto clock-in off") + shortcut
+        button.toolTip = (store.isRunning ? "Work Timer: tracking" : running ? "Work Timer: an agent is working" : settings.autoClockIn ? "Work Timer: not tracking" : "Work Timer: auto clock-in off") + shortcut
     }
 
     // MARK: - Clicks
@@ -188,6 +201,10 @@ final class StatusItemController: NSObject, NSWindowDelegate {
         open.target = self
         menu.addItem(open)
 
+        let dashboardItem = NSMenuItem(title: "Open Dashboard", action: #selector(openDashboard), keyEquivalent: "")
+        dashboardItem.target = self
+        menu.addItem(dashboardItem)
+
         let quit = NSMenuItem(title: "Quit Work Timer", action: #selector(quit), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
@@ -200,5 +217,6 @@ final class StatusItemController: NSObject, NSWindowDelegate {
     @objc private func toggleTimer() { tracker.toggle() }
     @objc private func toggleAutoClockIn() { settings.autoClockIn.toggle() }
     @objc private func openPopover() { showPopover() }
+    @objc private func openDashboard() { dashboard.show() }
     @objc private func quit() { NSApp.terminate(nil) }
 }

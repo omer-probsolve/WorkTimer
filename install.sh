@@ -31,5 +31,5 @@ Installed. Look for the clock icon in the menu bar.
 
   • ⌃⌥T  show / hide the Work Timer window
   • ⌃⌥S  start / stop the timer
-  • Shortcuts, idle timeout and auto-tracking live in the Settings tab.
+  • Shortcuts, idle timeout and auto-tracking live in Settings (the gear icon).
 TXT

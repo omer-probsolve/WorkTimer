@@ -23,8 +23,7 @@ final class SessionStore: ObservableObject {
     }
 
     init() {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        let directory = support.appendingPathComponent("WorkTimer", isDirectory: true)
+        let directory = AppPaths.dataDirectory
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         fileURL = directory.appendingPathComponent("sessions.json")
         load()

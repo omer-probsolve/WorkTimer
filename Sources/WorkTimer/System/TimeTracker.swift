@@ -14,6 +14,8 @@ final class TimeTracker {
     private let store: SessionStore
     private let settings: AppSettings
     private let notifier: Notifier
+    /// Names of agents working right now, which keep the work session going.
+    var runningAgents: () -> [String] = { [] }
 
     private var timer: Timer?
     private var observers: [NSObjectProtocol] = []
@@ -166,12 +168,17 @@ final class TimeTracker {
     private func notifyAutoStop(_ result: SessionStore.StopResult) {
         guard settings.notificationsEnabled else { return }
         let idle = "No activity for \(settings.idleMinutes) min"
-        let body: String
+        var body: String
         if result.logged {
             let today = store.total(in: Calendar.current.dateInterval(of: .day, for: Date())!, now: Date())
             body = "\(idle). Stopped at \(Format.time(result.session.end)) — logged \(Format.duration(result.session.duration)), \(Format.duration(today)) today."
         } else {
             body = "\(idle). The session was under a minute, so it wasn't logged."
+        }
+        let agents = runningAgents()
+        if !agents.isEmpty {
+            let names = ListFormatter.localizedString(byJoining: agents)
+            body += " \(names) \(agents.count == 1 ? "is" : "are") still working, so your work session continues."
         }
         notifier.post(
             title: "Clocked out",

@@ -41,3 +41,10 @@ enum Format {
         return f
     }()
 }
+
+extension Format {
+    /// "3.4×"
+    static func multiplier(_ value: Double) -> String {
+        String(format: "%.1f×", value)
+    }
+}
