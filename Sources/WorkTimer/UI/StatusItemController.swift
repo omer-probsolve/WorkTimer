@@ -136,8 +136,10 @@ final class StatusItemController: NSObject, NSWindowDelegate {
     private func refresh() {
         guard let button = statusItem.button else { return }
         let now = Date()
-        let sessionStart = log.metrics.currentSessionStart(now: now)
+        let metrics = log.metrics
+        let sessionStart = metrics.currentSessionStart(now: now)
         let running = sessionStart != nil
+        let agentSessions = metrics.running(now: now).count
         let symbol: String
         if store.isRunning {
             symbol = "timer"
@@ -157,16 +159,27 @@ final class StatusItemController: NSObject, NSWindowDelegate {
         }
 
         if let sessionStart {
-            let text = " " + Format.clock(now.timeIntervalSince(sessionStart), seconds: settings.showSecondsInMenuBar)
-            button.attributedTitle = NSAttributedString(string: text, attributes: [
-                .font: NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular),
-            ])
+            let font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+            let title = NSMutableAttributedString(
+                string: " " + Format.clock(now.timeIntervalSince(sessionStart), seconds: settings.showSecondsInMenuBar),
+                attributes: [.font: font]
+            )
+            // Agent sessions running across Claude and Codex, dimmed so it doesn't
+            // read as part of the time.
+            if agentSessions > 0 {
+                title.append(NSAttributedString(string: " · \(agentSessions)", attributes: [
+                    .font: font, .foregroundColor: NSColor.secondaryLabelColor,
+                ]))
+            }
+            button.attributedTitle = title
         } else if !button.title.isEmpty {
             button.title = ""
         }
 
         let shortcut = settings.togglePanelShortcut.map { " — \($0.displayString)" } ?? ""
-        button.toolTip = (store.isRunning ? "Work Timer: tracking" : running ? "Work Timer: an agent is working" : settings.autoClockIn ? "Work Timer: not tracking" : "Work Timer: auto clock-in off") + shortcut
+        let status = store.isRunning ? "Work Timer: tracking" : running ? "Work Timer: an agent is working" : settings.autoClockIn ? "Work Timer: not tracking" : "Work Timer: auto clock-in off"
+        let agents = agentSessions > 0 ? " · \(agentSessions) agent session\(agentSessions == 1 ? "" : "s") running" : ""
+        button.toolTip = status + agents + shortcut
     }
 
     // MARK: - Clicks

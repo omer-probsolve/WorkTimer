@@ -4,7 +4,8 @@ A menu bar app for logging work time on macOS 14+.
 
 ## Features
 
-- **Menu bar timer** — the clock icon turns into a running `1:23:45` while you're working.
+- **Menu bar timer** — the clock icon turns into a running `1:23:45` while you're working,
+  followed by `· 3` when Claude and Codex sessions are running (3 sessions in total).
   Left-click opens an at-a-glance window; right-click gives a quick Start/Stop / Auto Clock-In /
   Dashboard / Quit menu.
 - **Claude and Codex count as work** — the app reads Claude Code (terminal and the Claude
