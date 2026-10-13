@@ -147,18 +147,15 @@ final class SessionStore: ObservableObject {
 
     // MARK: - Queries
 
-    func elapsed(now: Date) -> TimeInterval {
-        guard let active else { return 0 }
-        return max(0, now.timeIntervalSince(active.start))
+    /// Your logged time: finished sessions plus the running one up to `now`.
+    func spans(now: Date) -> [Span] {
+        var spans = sessions.map(\.span)
+        if let active, now > active.start { spans.append(Span(start: active.start, end: now)) }
+        return spans
     }
 
     func total(in interval: DateInterval, now: Date) -> TimeInterval {
-        var sum = sessions.reduce(0) { $0 + $1.overlap(with: interval) }
-        if let active, now > active.start {
-            let running = WorkSession(start: active.start, end: now, startedAutomatically: false, endReason: .manual)
-            sum += running.overlap(with: interval)
-        }
-        return sum
+        spans(now: now).unionLength(in: interval)
     }
 
     func sessions(in interval: DateInterval) -> [WorkSession] {
@@ -169,13 +166,6 @@ final class SessionStore: ObservableObject {
     /// overlap it are included, clipped to its bounds so the durations add up to
     /// the time worked inside it.
     func csv(in interval: DateInterval? = nil) -> String {
-        let dateFormatter = DateFormatter()
-        dateFormatter.locale = Locale(identifier: "en_US_POSIX")
-        dateFormatter.dateFormat = "yyyy-MM-dd"
-        let timeFormatter = DateFormatter()
-        timeFormatter.locale = Locale(identifier: "en_US_POSIX")
-        timeFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-
         var lines = ["date,start,end,duration_minutes,started_automatically,end_reason"]
         for session in sessions {
             var start = session.start, end = session.end
@@ -185,9 +175,9 @@ final class SessionStore: ObservableObject {
                 end = min(end, interval.end)
             }
             lines.append([
-                dateFormatter.string(from: start),
-                timeFormatter.string(from: start),
-                timeFormatter.string(from: end),
+                Format.isoDay(start),
+                Format.isoDateTime(start),
+                Format.isoDateTime(end),
                 String(format: "%.1f", end.timeIntervalSince(start) / 60),
                 session.startedAutomatically ? "true" : "false",
                 session.endReason.rawValue,

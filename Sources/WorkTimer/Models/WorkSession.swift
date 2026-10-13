@@ -16,13 +16,12 @@ struct WorkSession: Codable, Identifiable, Equatable {
     var startedAutomatically: Bool
     var endReason: EndReason
 
-    var duration: TimeInterval { max(0, end.timeIntervalSince(start)) }
+    var span: Span { Span(start: start, end: end) }
+    var duration: TimeInterval { span.duration }
 
     /// The part of this session that falls inside `interval`.
     func overlap(with interval: DateInterval) -> TimeInterval {
-        let lower = max(start, interval.start)
-        let upper = min(end, interval.end)
-        return max(0, upper.timeIntervalSince(lower))
+        span.clipped(to: interval)?.duration ?? 0
     }
 }
 

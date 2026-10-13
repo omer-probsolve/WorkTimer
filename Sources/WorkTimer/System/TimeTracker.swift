@@ -170,7 +170,7 @@ final class TimeTracker {
         let idle = "No activity for \(settings.idleMinutes) min"
         var body: String
         if result.logged {
-            let today = store.total(in: Calendar.current.dateInterval(of: .day, for: Date())!, now: Date())
+            let today = store.total(in: .of(.day, containing: Date()), now: Date())
             body = "\(idle). Stopped at \(Format.time(result.session.end)) — logged \(Format.duration(result.session.duration)), \(Format.duration(today)) today."
         } else {
             body = "\(idle). The session was under a minute, so it wasn't logged."

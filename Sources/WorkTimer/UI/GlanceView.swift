@@ -14,7 +14,7 @@ struct GlanceView: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             let now = context.date
-            let today = Calendar.current.dateInterval(of: .day, for: now)!
+            let today = DateInterval.of(.day, containing: now)
             let sessionStart = log.currentSessionStart(now: now)
             let running = log.running(now: now)
             let live = log.liveWorkers(now: now)
@@ -81,7 +81,7 @@ struct GlanceView: View {
                     .monospacedDigit()
                     .foregroundStyle(sessionStart == nil ? .secondary : .primary)
                 MultiplierBadge(value: log.leverage(in: today, now: now))
-                    .help("Work logged today per hour of your time: you plus every agent session, divided by your time")
+                    .help(Explain.leverage)
             }
             Text("\(Format.clock(log.totalWork(in: today, now: now), seconds: false)) of work today")
                 .font(.caption)
@@ -97,10 +97,10 @@ struct GlanceView: View {
         let axis = ChartAxis.day(now, startMinute: settings.timelineStartMinute, endMinute: settings.timelineEndMinute)
         return Grid(alignment: .leading, horizontalSpacing: 6, verticalSpacing: 4) {
             lane("Session", color: .secondary, live: false, axis: axis,
-                 layers: [.init(spans: log.sessionSpans(now: now), color: .secondary.opacity(0.55))])
+                 layers: [.session(log.sessionSpans(now: now))])
             ForEach(Worker.allCases) { worker in
                 lane(worker.name, color: worker.color, live: live.contains(worker), axis: axis,
-                     layers: [.init(spans: log.spans(for: worker, now: now, segments: segments), color: worker.color)],
+                     layers: [.worker(worker, log.spans(for: worker, now: now, segments: segments))],
                      showOverlap: worker != .you)
             }
             GridRow {
@@ -114,8 +114,7 @@ struct GlanceView: View {
                       layers: [LaneBar.Layer], showOverlap: Bool = false) -> some View {
         GridRow {
             HStack(spacing: 5) {
-                // The slot is kept when idle so names line up.
-                if live { BreathingDot(color: color) } else { Color.clear.frame(width: 6, height: 6) }
+                LiveDot(color: color, live: live)
                 Text(title).font(.caption).foregroundStyle(color)
             }
             .frame(width: 62, alignment: .leading)
@@ -124,35 +123,11 @@ struct GlanceView: View {
     }
 
     private func card(_ worker: Worker, today: DateInterval, now: Date, live: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            HStack(spacing: 5) {
-                if live { BreathingDot(color: worker.color) }
-                Text(worker.name)
-                    .font(.caption)
-                    .foregroundStyle(worker.color)
-            }
-            Text(Format.clock(log.total(worker, in: today, now: now), seconds: false))
-                .font(.title3.weight(.medium))
-                .monospacedDigit()
-            Group {
-                if worker == .you {
-                    Text(" ")
-                } else {
-                    let hours = Format.clock(log.agentHours(worker, in: today, now: now), seconds: false)
-                    let parallel = log.parallelism(worker, in: today, now: now).map { " · \(Format.multiplier($0))" } ?? ""
-                    Text("× \(hours)\(parallel)")
-                        .help("Agent-hours (parallel sessions each count) · sessions running at once, on average, while \(worker.name) worked")
-                }
-            }
-            .font(.caption2)
-            .foregroundStyle(.tertiary)
-            .monospacedDigit()
-        }
-        .padding(8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 7).fill(Color.primary.opacity(0.05)))
-        .liveEdge(worker.color, live: live)
-        .clipShape(RoundedRectangle(cornerRadius: 7))
+        StatCard(
+            title: worker.name, color: worker.color, value: log.total(worker, in: today, now: now),
+            subtitle: log.agentSummary(worker, in: today, now: now, compact: true),
+            subtitleHelp: Explain.agent(worker), live: live, size: .compact
+        )
     }
 
     private func runningList(_ running: [WorkLog.RunningAgent], now: Date) -> some View {

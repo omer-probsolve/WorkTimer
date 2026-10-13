@@ -39,3 +39,10 @@ extension Array where Element == Span {
         compactMap { $0.clipped(to: interval) }.reduce(0) { $0 + $1.duration }
     }
 }
+
+extension DateInterval {
+    /// The calendar day, week, hour… containing `date`, in the user's calendar.
+    static func of(_ component: Calendar.Component, containing date: Date) -> DateInterval {
+        Calendar.current.dateInterval(of: component, for: date)!
+    }
+}

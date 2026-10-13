@@ -36,7 +36,7 @@ final class DashboardModel: ObservableObject {
     }
 
     var interval: DateInterval {
-        Calendar.current.dateInterval(of: period.component, for: anchor)!
+        DateInterval.of(period.component, containing: anchor)
     }
 
     var isCurrent: Bool { interval.contains(Date()) }
@@ -51,16 +51,9 @@ final class DashboardModel: ObservableObject {
         case .day:
             return Format.day(anchor)
         case .week:
-            let interval = interval
-            return Self.rangeFormatter.string(from: interval.start, to: interval.end.addingTimeInterval(-1))
+            return Format.dateRange(interval)
         }
     }
-
-    private static let rangeFormatter: DateIntervalFormatter = {
-        let f = DateIntervalFormatter()
-        f.dateTemplate = "MMMd"
-        return f
-    }()
 }
 
 /// The detailed window: a timeline grouped by worker or project, totals, and
@@ -174,12 +167,12 @@ struct DashboardView: View {
         case .workers:
             let session = log.sessionSpans(now: now)
             return [Lane(id: "session", filter: nil, title: "Session", total: session.unionLength(in: interval),
-                         layers: [.init(spans: session, color: .secondary.opacity(0.55))])]
+                         layers: [.session(session)])]
                 + Worker.allCases.map { worker in
                     let spans = log.spans(for: worker, now: now, segments: segments)
                     return Lane(id: worker.rawValue, filter: .worker(worker), title: worker.name,
                                 total: spans.unionLength(in: interval),
-                                layers: [.init(spans: spans, color: worker.color)],
+                                layers: [.worker(worker, spans)],
                                 color: worker.color, showOverlap: worker != .you,
                                 liveColor: live.contains(worker) ? worker.color : nil)
                 }
@@ -189,7 +182,7 @@ struct DashboardView: View {
                 return Lane(
                     id: project.name, filter: .project(project.name), title: project.name, total: project.wallClock,
                     layers: Worker.agents.map { worker in
-                        .init(spans: mine.filter { $0.worker == worker }.map(\.span), color: worker.color)
+                        .worker(worker, mine.filter { $0.worker == worker }.map(\.span))
                     },
                     liveColor: project.runningWorker?.color
                 )
@@ -210,13 +203,8 @@ struct DashboardView: View {
                 let selected = lane.filter != nil && model.filter == lane.filter
                 GridRow {
                     HStack(spacing: 6) {
-                        // The slot is kept when idle so lane names line up.
-                        if let liveColor = lane.liveColor {
-                            BreathingDot(color: liveColor)
-                                .help("Working now")
-                        } else {
-                            Color.clear.frame(width: 6, height: 6)
-                        }
+                        LiveDot(color: lane.liveColor ?? .clear, live: lane.liveColor != nil)
+                            .help(lane.liveColor == nil ? "" : "Working now")
                         Text(lane.title)
                             .lineLimit(1)
                             .truncationMode(.middle)
@@ -254,7 +242,7 @@ struct DashboardView: View {
         }
         GridRow {
             HStack(spacing: 6) {
-                Color.clear.frame(width: 6, height: 6)
+                LiveDot(color: .clear, live: false)
                 Text("Workers").foregroundStyle(.secondary)
             }
             .frame(width: 140, alignment: .leading)
@@ -271,31 +259,23 @@ struct DashboardView: View {
     /// The cards double as the table filter: Session shows everything.
     private func cards(interval: DateInterval, now: Date, live: Set<Worker>) -> some View {
         HStack(spacing: 10) {
-            FilterCard(
+            FilterCard(card: StatCard(
                 title: "Session", color: .secondary, value: log.sessionTotal(in: interval, now: now),
                 badge: .some(log.leverage(in: interval, now: now)),
                 subtitle: "\(Format.clock(log.totalWork(in: interval, now: now), seconds: false)) of work",
-                subtitleHelp: "Work logged per hour of your time: you plus every agent session, divided by your time",
-                live: false, selected: model.filter == nil,
-                onSelect: { model.filter = nil }, onClear: nil
-            )
+                subtitleHelp: Explain.leverage,
+                selected: model.filter == nil
+            ), onSelect: { model.filter = nil })
             ForEach(Worker.allCases) { worker in
-                FilterCard(
+                FilterCard(card: StatCard(
                     title: worker.name, color: worker.color, value: log.total(worker, in: interval, now: now),
-                    subtitle: agentSubtitle(worker, interval: interval, now: now),
-                    subtitleHelp: "Agent-hours (parallel sessions each count) · sessions running at once, on average, while \(worker.name) worked",
+                    subtitle: log.agentSummary(worker, in: interval, now: now, compact: false),
+                    subtitleHelp: Explain.agent(worker),
                     live: live.contains(worker), selected: model.filter == .worker(worker),
-                    onSelect: { model.toggle(.worker(worker)) }, onClear: { model.filter = nil }
-                )
+                    onClear: { model.filter = nil }
+                ), onSelect: { model.toggle(.worker(worker)) })
             }
         }
-    }
-
-    private func agentSubtitle(_ worker: Worker, interval: DateInterval, now: Date) -> String? {
-        guard worker != .you else { return nil }
-        let hours = "\(Format.clock(log.agentHours(worker, in: interval, now: now), seconds: false)) agent-hours"
-        guard let parallel = log.parallelism(worker, in: interval, now: now) else { return hours }
-        return "\(hours) · \(Format.multiplier(parallel))"
     }
 
     // MARK: - Table
@@ -403,7 +383,7 @@ private struct EntryRow: View {
         .font(.callout)
         .padding(.vertical, 5)
         .padding(.horizontal, 8)
-        .background(RoundedRectangle(cornerRadius: 4).fill(hovering && isYours ? Color.primary.opacity(0.05) : .clear))
+        .background(RoundedRectangle(cornerRadius: 4).fill(hovering && isYours ? Color.cardFill : .clear))
         .liveEdge(entry.worker.color, live: entry.running)
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
@@ -441,86 +421,25 @@ private struct EntryRow: View {
     private var timeText: String {
         let end = entry.running ? "now" : Format.time(entry.span.end)
         let range = "\(Format.time(entry.span.start)) – \(end)"
-        return showDay ? "\(Self.weekday.string(from: entry.span.start)) \(range)" : range
+        return showDay ? "\(Format.weekday(entry.span.start)) \(range)" : range
     }
-
-    private static let weekday: DateFormatter = {
-        let f = DateFormatter()
-        f.setLocalizedDateFormatFromTemplate("EEE")
-        return f
-    }()
 }
 
-/// A totals card that filters the session table when clicked. The selected card
-/// is raised onto the window surface, like the selected segment of a picker.
+/// A totals card that filters the session table when clicked.
 private struct FilterCard: View {
-    let title: String
-    let color: Color
-    let value: TimeInterval
-    /// `.some(nil)` shows an empty badge ("—"); nil shows none.
-    var badge: Double?? = nil
-    let subtitle: String?
-    let subtitleHelp: String
-    let live: Bool
-    let selected: Bool
+    let card: StatCard
     let onSelect: () -> Void
-    /// Shows a clear button while selected; nil for the Session card.
-    let onClear: (() -> Void)?
 
     @State private var hovering = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 6) {
-                if live { BreathingDot(color: color) }
-                Text(title).font(.caption).foregroundStyle(color)
-                Spacer(minLength: 0)
-                if selected, let onClear {
-                    Button(action: onClear) {
-                        Image(systemName: "xmark")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Show all sessions")
-                }
-            }
-            HStack(spacing: 6) {
-                Text(Format.clock(value, seconds: false))
-                    .font(.title2.weight(.medium))
-                    .monospacedDigit()
-                if let badge {
-                    MultiplierBadge(value: badge)
-                }
-            }
-            Text(subtitle ?? " ")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-                .monospacedDigit()
-                .lineLimit(1)
-                .help(subtitle == nil ? "" : subtitleHelp)
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(background)
-        .liveEdge(color, live: live)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .shadow(color: .black.opacity(selected ? 0.15 : 0), radius: 2, y: 1)
-        .contentShape(RoundedRectangle(cornerRadius: 8))
-        .onHover { hovering = $0 }
-        .onTapGesture(perform: onSelect)
-        .help(selected ? "" : "Show only \(title == "Session" ? "all" : title) sessions")
-        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
-    }
-
-    @ViewBuilder private var background: some View {
-        let shape = RoundedRectangle(cornerRadius: 8)
-        if selected {
-            shape
-                .fill(Color(nsColor: .controlBackgroundColor))
-                .overlay(shape.strokeBorder(Color.primary.opacity(0.18), lineWidth: 0.5))
-        } else {
-            shape.fill(Color.primary.opacity(hovering ? 0.08 : 0.05))
-        }
+        var card = card
+        card.hovering = hovering
+        return card
+            .contentShape(RoundedRectangle(cornerRadius: StatCard.cornerRadius))
+            .onHover { hovering = $0 }
+            .onTapGesture(perform: onSelect)
+            .help(card.selected ? "" : "Show only \(card.title == "Session" ? "all" : card.title) sessions")
+            .accessibilityAddTraits(card.selected ? [.isButton, .isSelected] : .isButton)
     }
 }

@@ -100,7 +100,7 @@ struct ExportBox: View {
 
     @State private var mode: Mode = .day
     @State private var day = Date()
-    @State private var from = Calendar.current.dateInterval(of: .weekOfYear, for: Date())!.start
+    @State private var from = DateInterval.of(.weekOfYear, containing: Date()).start
     @State private var to = Date()
 
     private let calendar = Calendar.current
@@ -111,10 +111,10 @@ struct ExportBox: View {
         case .all:
             return nil
         case .day:
-            return calendar.dateInterval(of: .day, for: day)
+            return .of(.day, containing: day)
         case .range:
             let start = calendar.startOfDay(for: min(from, to))
-            let end = calendar.dateInterval(of: .day, for: max(from, to))!.end
+            let end = DateInterval.of(.day, containing: max(from, to)).end
             return DateInterval(start: start, end: end)
         }
     }
@@ -171,7 +171,7 @@ struct ExportBox: View {
         }
         .datePickerStyle(.stepperField)
         .padding(10)
-        .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.05)))
+        .cardBackground()
     }
 
     private var presetsMenu: some View {
@@ -195,7 +195,7 @@ struct ExportBox: View {
 
     private func pickRange(_ component: Calendar.Component, offset: Int) {
         let reference = calendar.date(byAdding: component, value: offset, to: Date())!
-        let period = calendar.dateInterval(of: component, for: reference)!
+        let period = DateInterval.of(component, containing: reference)
         mode = .range
         from = period.start
         // The period's end is midnight of the next day; step back into the last day.
@@ -203,14 +203,11 @@ struct ExportBox: View {
     }
 
     private var fileName: String {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "yyyy-MM-dd"
         switch mode {
         case .all: return "work-time-all.csv"
-        case .day: return "work-time-\(f.string(from: day)).csv"
+        case .day: return "work-time-\(Format.isoDay(day)).csv"
         case .range:
-            let lo = f.string(from: min(from, to)), hi = f.string(from: max(from, to))
+            let lo = Format.isoDay(min(from, to)), hi = Format.isoDay(max(from, to))
             return lo == hi ? "work-time-\(lo).csv" : "work-time-\(lo)-to-\(hi).csv"
         }
     }

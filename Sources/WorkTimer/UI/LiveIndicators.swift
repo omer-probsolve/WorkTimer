@@ -42,6 +42,22 @@ struct WorkerDot: View {
     }
 }
 
+/// The live marker before a name: a breathing dot while live. Otherwise an
+/// empty slot of the same size when `keepsSpace`, so names line up.
+struct LiveDot: View {
+    let color: Color
+    let live: Bool
+    var keepsSpace = true
+
+    var body: some View {
+        if live {
+            BreathingDot(color: color)
+        } else if keepsSpace {
+            Color.clear.frame(width: 6, height: 6)
+        }
+    }
+}
+
 extension View {
     /// A thin bar in `color` along the leading edge when `live`.
     func liveEdge(_ color: Color, live: Bool) -> some View {

@@ -15,6 +15,13 @@ struct ChartAxis {
     let range: DateInterval
     let ticks: [(Date, String)]
 
+    /// The empty track every lane is drawn on; later drawing is clipped to it.
+    static func drawTrack(in context: inout GraphicsContext, size: CGSize) {
+        let track = Path(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: 3)
+        context.fill(track, with: .color(.primary.opacity(0.06)))
+        context.clip(to: track)
+    }
+
     func x(_ date: Date, width: CGFloat) -> CGFloat {
         CGFloat(date.timeIntervalSince(range.start) / range.duration) * width
     }
@@ -29,12 +36,10 @@ struct ChartAxis {
         let step: TimeInterval = (hours <= 4 ? 1 : hours <= 10 ? 2 : hours <= 16 ? 3 : 4) * 3600
         var ticks: [(Date, String)] = []
         // Labels on whole hours, starting at the first one inside the range.
-        var tick = Calendar.current.dateInterval(of: .hour, for: start.addingTimeInterval(-1))!.end
+        var tick = DateInterval.of(.hour, containing: start.addingTimeInterval(-1)).end
         let nextMidnight = midnight.addingTimeInterval(24 * 3600)
         while tick <= end {
-            // The day's closing midnight reads "24" on a 24-hour clock, not "0".
-            let label = tick == nextMidnight && uses24HourClock ? "24" : hourFormatter.string(from: tick)
-            ticks.append((tick, label))
+            ticks.append((tick, Format.hour(tick, closingMidnight: tick == nextMidnight)))
             tick = tick.addingTimeInterval(step)
         }
         return ChartAxis(range: DateInterval(start: start, end: end), ticks: ticks)
@@ -45,25 +50,11 @@ struct ChartAxis {
         var ticks: [(Date, String)] = []
         var day = interval.start
         while day < interval.end {
-            ticks.append((day, weekdayFormatter.string(from: day)))
+            ticks.append((day, Format.weekdayAndDay(day)))
             day = calendar.date(byAdding: .day, value: 1, to: day)!
         }
         return ChartAxis(range: interval, ticks: ticks)
     }
-
-    private static let uses24HourClock = !(DateFormatter.dateFormat(fromTemplate: "j", options: 0, locale: .current) ?? "").contains("a")
-
-    private static let hourFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.setLocalizedDateFormatFromTemplate("j")
-        return f
-    }()
-
-    private static let weekdayFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.setLocalizedDateFormatFromTemplate("EEE d")
-        return f
-    }()
 }
 
 /// One horizontal track of colored blocks.
@@ -71,6 +62,9 @@ struct LaneBar: View {
     struct Layer {
         let spans: [Span]
         let color: Color
+
+        static func session(_ spans: [Span]) -> Layer { Layer(spans: spans, color: .secondary.opacity(0.55)) }
+        static func worker(_ worker: Worker, _ spans: [Span]) -> Layer { Layer(spans: spans, color: worker.color) }
     }
 
     let layers: [Layer]
@@ -82,9 +76,7 @@ struct LaneBar: View {
 
     var body: some View {
         Canvas { context, size in
-            let track = Path(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: 3)
-            context.fill(track, with: .color(.primary.opacity(0.06)))
-            context.clip(to: track)
+            ChartAxis.drawTrack(in: &context, size: size)
             for layer in layers {
                 for span in layer.spans.merged() {
                     guard let rect = rect(span, size: size) else { continue }
@@ -165,9 +157,7 @@ struct ConcurrencyBar: View {
     var body: some View {
         let peak = max(peak, 1)
         Canvas { context, size in
-            let track = Path(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: 3)
-            context.fill(track, with: .color(.primary.opacity(0.06)))
-            context.clip(to: track)
+            ChartAxis.drawTrack(in: &context, size: size)
             // One path, filled once: separately filled steps leave darker seams
             // where their antialiased edges meet.
             var path = Path()
@@ -196,7 +186,7 @@ struct MultiplierBadge: View {
             .padding(.vertical, 1)
             .background(
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(Color.primary.opacity(0.05))
+                    .fill(Color.cardFill)
                     .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.primary.opacity(0.2), lineWidth: 0.5))
             )
     }

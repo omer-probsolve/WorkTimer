@@ -103,9 +103,7 @@ final class WorkLog: ObservableObject {
     }
 
     func yourSpans(now: Date) -> [Span] {
-        var spans = store.sessions.map { Span(start: $0.start, end: $0.end) }
-        if let active = store.active, now > active.start { spans.append(Span(start: active.start, end: now)) }
-        return spans
+        store.spans(now: now)
     }
 
     func spans(for worker: Worker, now: Date, segments: [AgentSegment]? = nil) -> [Span] {
@@ -120,7 +118,7 @@ final class WorkLog: ObservableObject {
     // MARK: - Totals
 
     func total(_ worker: Worker, in interval: DateInterval, now: Date) -> TimeInterval {
-        spans(for: worker, now: now).unionLength(in: interval)
+        worker == .you ? store.total(in: interval, now: now) : spans(for: worker, now: now).unionLength(in: interval)
     }
 
     func agentHours(_ worker: Worker, in interval: DateInterval, now: Date) -> TimeInterval {
@@ -248,7 +246,7 @@ final class WorkLog: ObservableObject {
     func entries(in interval: DateInterval, now: Date) -> [Entry] {
         var entries: [Entry] = []
         for session in store.sessions(in: interval) {
-            let span = Span(start: session.start, end: session.end)
+            let span = session.span
             entries.append(Entry(
                 id: session.id.uuidString, worker: .you, kind: .you(session),
                 span: span, worked: [span].unionLength(in: interval), running: false
