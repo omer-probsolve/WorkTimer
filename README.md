@@ -1,6 +1,12 @@
 # Work Timer
 
-A menu bar app for logging work time on macOS 14+.
+[![CI](https://github.com/omer-probsolve/WorkTimer/actions/workflows/ci.yml/badge.svg)](https://github.com/omer-probsolve/WorkTimer/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+A menu bar app for logging work time on macOS 14+, including the time Claude Code and Codex
+agents spend working for you.
+
+![The dashboard: a day timeline for you, Claude and Codex, totals with multipliers, a weekday-by-hour heat-map and the session list](docs/dashboard.png)
 
 ## Features
 
@@ -73,3 +79,11 @@ counted. Subagents are covered by their parent session. Agent work from before t
 launch with this feature only shows on days you also logged time.
 
 The Claude chat tab doesn't write transcripts, so only Claude Code work counts.
+
+## Contributing
+
+Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+
+[MIT](LICENSE)

@@ -33,7 +33,7 @@ everywhere it's needed.
 | Publishing sessions to the macOS UI and saving them | `WorkTimer/Store/SessionStore.swift` |
 | Watching transcripts on macOS (FSEvents) and publishing segments | `WorkTimer/Agents/AgentMonitor.swift` |
 | Publishing `WorkMetrics` to the macOS UI | `WorkTimer/Store/WorkLog.swift` |
-| Data folder location | `WorkTimer/Store/AppPaths.swift` |
+| Data folder and transcripts home locations | `WorkTimer/Store/AppPaths.swift` |
 | Preferences | `WorkTimer/Store/AppSettings.swift` |
 | Worker colors | `Worker.color` in `WorkTimer/UI/LaneChart.swift` |
 | Timeline axis, lanes, lane styles, track, concurrency chart, hover line and card, week heat-map, multiplier badge | `WorkTimer/UI/LaneChart.swift` |
@@ -71,6 +71,9 @@ To try a debug build next to the installed app without touching real data:
 ```bash
 WORKTIMER_DATA_DIR=/path/to/scratch .build/debug/WorkTimer
 ```
+
+Add `WORKTIMER_HOME=/path/to/demo` to read transcripts from `/path/to/demo/.claude` and
+`/path/to/demo/.codex` instead of your own.
 
 Debug builds also render their own windows to PNGs in the data folder when they receive the
 `com.omershaashua.worktimer.debugSnapshot` distributed notification (`userInfo` keys:

@@ -17,6 +17,7 @@ final class AgentMonitor: ObservableObject {
     /// - Parameter cutoff: transcripts last changed before this aren't read.
     init(cutoff: Date) {
         scanner = TranscriptScanner(
+            home: AppPaths.transcriptsHome,
             cacheURL: AppPaths.dataDirectory.appendingPathComponent("agent-cache.json"),
             cutoff: cutoff
         )
