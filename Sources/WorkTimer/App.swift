@@ -110,8 +110,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     guard let view = window.contentView, view.bounds.width > 100,
                           let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { continue }
                     view.cacheDisplay(in: view.bounds, to: rep)
+                    // The window, not the content view, draws the background; add it
+                    // so the PNG isn't transparent.
+                    let image = NSImage(size: view.bounds.size, flipped: false) { rect in
+                        window.effectiveAppearance.performAsCurrentDrawingAppearance {
+                            window.backgroundColor.setFill()
+                            rect.fill()
+                        }
+                        rep.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: false, hints: nil)
+                        return true
+                    }
+                    guard let tiff = image.tiffRepresentation, let flat = NSBitmapImageRep(data: tiff) else { continue }
                     let url = AppPaths.dataDirectory.appendingPathComponent("snapshot-\(index).png")
-                    try? rep.representation(using: .png, properties: [:])?.write(to: url)
+                    try? flat.representation(using: .png, properties: [:])?.write(to: url)
                 }
             }
         }

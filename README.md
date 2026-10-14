@@ -6,7 +6,10 @@
 A menu bar app for logging work time on macOS 14+, including the time Claude Code and Codex
 agents spend working for you.
 
-![The dashboard: a day timeline for you, Claude and Codex, totals with multipliers, a weekday-by-hour heat-map and the session list](docs/dashboard.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/dashboard-dark.png">
+  <img alt="The dashboard: a day timeline for you, Claude and Codex, totals with multipliers, a weekday-by-hour heat-map and the session list" src="docs/dashboard-light.png" width="780">
+</picture>
 
 ## Features
 
