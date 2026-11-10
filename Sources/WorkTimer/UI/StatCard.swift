@@ -41,7 +41,7 @@ struct StatCard: View {
         VStack(alignment: .leading, spacing: size == .compact ? 1 : 2) {
             HStack(spacing: 6) {
                 LiveDot(color: color, live: live, keepsSpace: false)
-                Text(title).font(.caption).foregroundStyle(color)
+                Text(title).font(.caption).foregroundStyle(color).lineLimit(1)
                 Spacer(minLength: 0)
                 if selected, let onClear {
                     Button(action: onClear) {

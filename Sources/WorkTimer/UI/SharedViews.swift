@@ -276,6 +276,20 @@ struct SettingsView: View {
                 }
             }
 
+            Section("AI World") {
+                Toggle("Count AI World agents", isOn: $settings.countAIWorld)
+                LabeledContent("AI World folder") {
+                    HStack {
+                        Text(settings.aiWorldFolder.isEmpty ? "Not set" : (settings.aiWorldFolder as NSString).abbreviatingWithTildeInPath)
+                            .foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                        Button("Choose…") { chooseAIWorldFolder() }
+                    }
+                }
+                Text("Reads the agent turns of AI World running on this Mac, from its local database. Nothing in AI World is changed. Work Timer asks the Supabase CLI (supabase status) in this folder for the database's key.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Timeline") {
                 DatePicker("Starts", selection: minuteBinding(\.timelineStartMinute), displayedComponents: .hourAndMinute)
                 DatePicker("Ends", selection: minuteBinding(\.timelineEndMinute), displayedComponents: .hourAndMinute)
@@ -286,6 +300,8 @@ struct SettingsView: View {
 
             Section("General") {
                 Toggle("Show seconds in the menu bar", isOn: $settings.showSecondsInMenuBar)
+                Toggle("Show only the icon on screens with a notch", isOn: $settings.iconOnlyOnNotchedScreens)
+                    .help("macOS hides menu bar items that don't fit beside the notch.")
                 Toggle("Open at login", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, newValue in setLaunchAtLogin(newValue) }
                 if let loginItemError {
@@ -308,6 +324,15 @@ struct SettingsView: View {
     }
 
     /// Edits a minutes-after-midnight setting as a time of day.
+    private func chooseAIWorldFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.message = "Choose AI World's project folder, the one with supabase/config.toml."
+        if !settings.aiWorldFolder.isEmpty { panel.directoryURL = URL(fileURLWithPath: settings.aiWorldFolder) }
+        if panel.runModal() == .OK, let url = panel.url { settings.aiWorldFolder = url.path }
+    }
+
     private func minuteBinding(_ keyPath: ReferenceWritableKeyPath<AppSettings, Int>) -> Binding<Date> {
         let midnight = Calendar.current.startOfDay(for: Date())
         return Binding(

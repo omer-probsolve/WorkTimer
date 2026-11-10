@@ -24,14 +24,18 @@ everywhere it's needed.
 | Day / week / hour ranges | `DateInterval.of(_:containing:)` in `WorkTimerCore/Timeline.swift` |
 | Time per weekday × hour, and its shading levels | `WeekHeatmap`, `[Span].weekHeatmap()` in `WorkTimerCore/Timeline.swift` |
 | Your sessions: rules, edits, validation, your time, CSV, the `sessions.json` format | `WorkTimerCore/SessionLog.swift` |
-| Agent transcript parsing, turn rules, the 5-minute silence rule | `WorkTimerCore/AgentLog.swift` (`AgentLogState`) |
+| Agent transcript parsing, turn rules, the 5-minute silence rule and its tool-wait exceptions | `WorkTimerCore/AgentLog.swift` (`AgentLogState`) |
 | Finding and reading transcripts, the parse cache | `WorkTimerCore/TranscriptScanner.swift` |
+| AI World turns: reading its local database, the turn rules (approval waits, silences), its cache | `WorkTimerCore/AIWorldLog.swift` (`AIWorldTurn`, `AIWorldScanner`) |
+| Polling AI World on macOS and publishing its segments | `WorkTimer/Agents/AIWorldMonitor.swift` |
 | Project name for a folder | `WorkTimerCore/ProjectResolver.swift` |
 | All totals: per worker, agent-hours, session, multipliers, concurrency, who's live, table rows, what was happening at a moment (`Moment`); tooltip copy (`Explain`); agent card text | `WorkTimerCore/WorkMetrics.swift` |
 | Every user-visible number / time / date format, and every `DateFormatter` | `WorkTimerCore/Format.swift` |
 | Worker names | `Worker` in `WorkTimerCore/AgentLog.swift` |
 | Publishing sessions to the macOS UI and saving them | `WorkTimer/Store/SessionStore.swift` |
 | Watching transcripts on macOS (FSEvents) and publishing segments | `WorkTimer/Agents/AgentMonitor.swift` |
+| Background tasks: which keep an agent working, when one counts as busy (`BackgroundTask`, `TaskActivity`, `TaskActivityTracker`) | `WorkTimerCore/AgentLog.swift` |
+| Whether a background task's processes worked since the last check on macOS (CPU, file writes) | `WorkTimer/Agents/TaskProbe.swift` |
 | Publishing `WorkMetrics` to the macOS UI | `WorkTimer/Store/WorkLog.swift` |
 | Data folder and transcripts home locations | `WorkTimer/Store/AppPaths.swift` |
 | Preferences | `WorkTimer/Store/AppSettings.swift` |
@@ -92,7 +96,8 @@ layout without Screen Recording permission.
 
 A new platform adds an app target next to `WorkTimer` that depends on `WorkTimerCore`, and
 supplies only what the core leaves to the platform: UI, idle detection, file watching (call
-`TranscriptScanner.scan()` on changes), hotkeys, notifications and where data is stored. Don't
+`TranscriptScanner.scan()` on changes), checking on `pendingTasks` (pass the result to
+`segments(taskActivity:)`), hotkeys, notifications and where data is stored. Don't
 fork the logic per platform — if the core is missing something, add it to the core.
 
 Known gaps for Windows: transcript locations and `ProjectResolver` assume `/`-separated paths

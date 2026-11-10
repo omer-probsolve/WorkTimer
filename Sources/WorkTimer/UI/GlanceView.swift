@@ -9,7 +9,7 @@ struct GlanceView: View {
     let tracker: TimeTracker
     let openDashboard: (_ settings: Bool) -> Void
 
-    static let size = CGSize(width: 320, height: 470)
+    static let size = CGSize(width: 380, height: 470)
     private static let maxRunningRows = 3
 
     var body: some View {
@@ -141,7 +141,14 @@ struct GlanceView: View {
                 Divider()
                 HStack(spacing: 7) {
                     BreathingDot(color: agent.worker.color)
-                    Text(agent.project).lineLimit(1)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(agent.project).lineLimit(1)
+                        if agent.waitingOnTask {
+                            Text("Waiting on a background task")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                     Spacer()
                     Text("\(agent.worker.name) · \(Format.duration(now.timeIntervalSince(agent.since)))")
                         .foregroundStyle(.secondary)

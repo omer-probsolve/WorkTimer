@@ -10,14 +10,28 @@ package struct AgentSegment: Equatable {
     /// The session's turn is still open; if the agent is active, the segment
     /// really runs until now.
     package var open: Bool
+    /// The agent is running a tool that didn't ask you anything, so it's still
+    /// working through a long silence.
+    package var notWaitingOnYou: Bool
+    /// The agent's turn ended but it's waiting on a background task that's still
+    /// working, so the session stays open (and `notWaitingOnYou`).
+    package var waitingOnTask: Bool
 
-    package init(worker: Worker, sessionID: String, project: String, source: String, span: Span, open: Bool) {
+    package init(worker: Worker, sessionID: String, project: String, source: String, span: Span, open: Bool,
+                 notWaitingOnYou: Bool = false, waitingOnTask: Bool = false) {
         self.worker = worker
         self.sessionID = sessionID
         self.project = project
         self.source = source
         self.span = span
-        self.open = open
+        self.open = open || waitingOnTask
+        self.notWaitingOnYou = notWaitingOnYou || waitingOnTask
+        self.waitingOnTask = waitingOnTask
+    }
+
+    /// How long an open segment can go quiet and still be the agent working.
+    package var maxSilence: TimeInterval {
+        notWaitingOnYou ? AgentLogState.maxToolRun : AgentLogState.maxSilence
     }
 }
 
@@ -38,7 +52,9 @@ package final class TranscriptScanner {
     private let cacheURL: URL
     private var states: [String: AgentLogState] = [:]
 
-    private static let cacheVersion = 1
+    /// Bumping it re-reads every transcript, so a change to the rules applies to
+    /// past days too.
+    private static let cacheVersion = 3
     private static let chunkSize = 8 << 20
 
     package init(home: String = NSHomeDirectory(), cacheURL: URL, cutoff: Date) {
@@ -80,18 +96,34 @@ package final class TranscriptScanner {
         return changed
     }
 
+    /// Background tasks of sessions whose turn ended recently, for the platform
+    /// to check on: whether they're still working decides if the agent is.
+    package func pendingTasks(now: Date) -> [BackgroundTask] {
+        states.values.flatMap { state -> [BackgroundTask] in
+            guard !state.ignored, !state.turnOpen, let last = state.lastActivity,
+                  now.timeIntervalSince(last) <= AgentLogState.maxToolRun else { return [] }
+            return state.backgroundTasks.values.filter { $0.outputFile != nil }
+        }
+    }
+
     /// Every agent's work so far, oldest first.
-    package func segments() -> [AgentSegment] {
+    /// - Parameter taskActivity: what each pending background task is doing, by ID.
+    package func segments(taskActivity: [String: TaskActivity] = [:]) -> [AgentSegment] {
         var result: [AgentSegment] = []
         for state in states.values where !state.ignored {
+            let waiting = !state.turnOpen && state.backgroundTasks.values.contains { task in
+                taskActivity[task.id].map(task.keepsAgentWorking) ?? false
+            }
             let project = ProjectResolver.name(for: state.cwd)
             let session = state.sessionID ?? UUID().uuidString
             let source = state.source ?? "Unknown"
             let spans = state.allSegments
             for (index, span) in spans.enumerated() {
+                let last = index == spans.count - 1
                 result.append(AgentSegment(
                     worker: state.worker, sessionID: session, project: project, source: source,
-                    span: span, open: state.isLive && index == spans.count - 1
+                    span: span, open: state.isLive && last, notWaitingOnYou: state.notWaitingOnYou && last,
+                    waitingOnTask: waiting && last
                 ))
             }
         }

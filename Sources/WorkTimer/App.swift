@@ -19,6 +19,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let notifier = Notifier()
     private var store: SessionStore!
     private var agents: AgentMonitor!
+    private lazy var aiWorld = AIWorldMonitor { [settings] in
+        settings.aiWorldFolder.isEmpty ? nil : URL(fileURLWithPath: settings.aiWorldFolder)
+    }
     private var log: WorkLog!
     private var tracker: TimeTracker!
     private var dashboard: DashboardWindowController!
@@ -29,7 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         store = SessionStore()
         let trackingStart = agentTrackingStart()
         agents = AgentMonitor(cutoff: WorkMetrics.agentCutoff(log: store.log, trackingStart: trackingStart))
-        log = WorkLog(store: store, agents: agents, trackingStart: trackingStart)
+        log = WorkLog(store: store, agents: agents, aiWorld: aiWorld, trackingStart: trackingStart)
         tracker = TimeTracker(store: store, settings: settings, notifier: notifier)
         tracker.runningAgents = { [weak self] in
             guard let self else { return [] }
@@ -46,6 +49,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             .store(in: &cancellables)
         agents.start()
+        settings.$countAIWorld
+            .removeDuplicates()
+            .sink { [weak self] enabled in self?.aiWorld.setEnabled(enabled) }
+            .store(in: &cancellables)
 
         notifier.onAction = { [weak self] action, sessionID in
             self?.handleNotificationAction(action, sessionID: sessionID)

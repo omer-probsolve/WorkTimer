@@ -1,7 +1,7 @@
 import Foundation
 
 package enum Worker: String, Codable, CaseIterable, Identifiable {
-    case you, claude, codex
+    case you, claude, codex, aiWorld
 
     package var id: Self { self }
 
@@ -10,10 +10,11 @@ package enum Worker: String, Codable, CaseIterable, Identifiable {
         case .you: return "You"
         case .claude: return "Claude"
         case .codex: return "Codex"
+        case .aiWorld: return "AI World"
         }
     }
 
-    package static let agents: [Worker] = [.claude, .codex]
+    package static let agents: [Worker] = [.claude, .codex, .aiWorld]
 }
 
 /// What one agent transcript file says about when its agent was working.
@@ -24,9 +25,15 @@ package enum Worker: String, Codable, CaseIterable, Identifiable {
 ///
 /// A turn runs from the user's prompt to the agent's final answer. Inside a turn,
 /// a silence longer than `maxSilence` is treated as the agent waiting on you (a
-/// permission prompt, say) and isn't counted.
+/// permission prompt, say) and isn't counted — unless the agent was waiting on a
+/// tool that didn't ask you anything (a long test run), which counts for up to
+/// `maxToolRun`. A background task that wakes the agent after its turn ended
+/// counts the same way.
 package struct AgentLogState: Codable {
     package static let maxSilence: TimeInterval = 5 * 60
+    /// The longest silence counted as the agent waiting on a tool. Caps the damage
+    /// when a session is killed mid-tool.
+    package static let maxToolRun: TimeInterval = 60 * 60
 
     package var worker: Worker
     package var fileSize: UInt64 = 0
@@ -47,12 +54,27 @@ package struct AgentLogState: Codable {
     package var lastActivity: Date?
     package var segments: [Span] = []
 
+    /// Claude Code tool calls still waiting for their result.
+    package var runningTools: Set<String> = []
+    /// Claude Code background tasks that haven't reported back yet, by ID.
+    package var backgroundTasks: [String: BackgroundTask] = [:]
+    /// The agent may stop to ask you for permission, so a silence may be it
+    /// waiting on you. From Claude Code's permission mode, Codex's approval policy.
+    package var mayAsk = true
+
     package init(worker: Worker) {
         self.worker = worker
     }
 
     /// The turn is still in progress, so the agent may be working right now.
     package var isLive: Bool { turnOpen && !turnEnding }
+
+    /// The agent can't be waiting on you right now — it's running a tool without
+    /// a permission prompt, or it never asks — so silence is still work.
+    package var notWaitingOnYou: Bool {
+        guard turnOpen, !mayAsk else { return false }
+        return worker == .codex || !runningTools.isEmpty
+    }
 
     /// Finished segments plus the open one, which ends at the last activity seen.
     package var allSegments: [Span] {
@@ -76,10 +98,14 @@ package struct AgentLogState: Codable {
         }
     }
 
-    private mutating func activity(at time: Date) {
+    /// - Parameter toolRan: the silence before `time` was a tool running, not a
+    ///   wait on you; defaults to what's known while the silence lasts.
+    private mutating func activity(at time: Date, toolRan: Bool? = nil) {
         guard turnOpen, let last = lastActivity, let start = segmentStart else { return }
         guard time > last else { return }
-        if time.timeIntervalSince(last) > Self.maxSilence {
+        let silence = time.timeIntervalSince(last)
+        let counted = (toolRan ?? notWaitingOnYou) ? Self.maxToolRun : Self.maxSilence
+        if silence > counted {
             if last > start { segments.append(Span(start: start, end: last)) }
             segmentStart = time
         }
@@ -95,6 +121,18 @@ package struct AgentLogState: Codable {
         turnOpen = false
         turnEnding = false
         segmentStart = nil
+        runningTools = []
+    }
+
+    /// A background task the agent started reported back: the agent was waiting
+    /// on it since its turn ended, so the turn carries on.
+    private mutating func resumeTurn(at time: Date) {
+        guard !turnOpen, let last = lastActivity, time.timeIntervalSince(last) <= Self.maxToolRun,
+              let previous = segments.last, previous.end == last else { return openTurn(at: time) }
+        segments.removeLast()
+        turnOpen = true
+        segmentStart = previous.start
+        activity(at: time, toolRan: true)
     }
 
     // MARK: - Lines
@@ -104,7 +142,7 @@ package struct AgentLogState: Codable {
         switch worker {
         case .claude: consumeClaude(line)
         case .codex: consumeCodex(line)
-        case .you: break
+        case .you, .aiWorld: break
         }
     }
 
@@ -135,16 +173,43 @@ package struct AgentLogState: Codable {
         let message = object["message"] as? [String: Any]
         switch type {
         case "user":
+            if let mode = object["permissionMode"] as? String {
+                mayAsk = mode != "auto" && mode != "bypassPermissions"
+            }
             if object["isMeta"] as? Bool == true { activity(at: time); return }
             switch Self.promptKind(message?["content"]) {
             case .prompt: openTurn(at: time)
             case .interrupt: closeTurn(at: time)
+            case let .toolResults(ids):
+                let waited = !runningTools.isDisjoint(with: ids)
+                runningTools.subtract(ids)
+                if let result = object["toolUseResult"] as? [String: Any],
+                   let id = result["backgroundTaskId"] as? String {
+                    backgroundTasks[id] = BackgroundTask(
+                        id: id, outputFile: Self.outputFile(in: message?["content"]),
+                        movedByTimeout: result["timedOutAfterMs"] != nil
+                    )
+                }
+                activity(at: time, toolRan: waited && !Self.askedYou(object["permissionDecision"]))
+            case let .taskNotification(task):
+                if backgroundTasks.removeValue(forKey: task) != nil, !turnOpen {
+                    resumeTurn(at: time)
+                } else {
+                    openTurn(at: time)
+                }
             case .other: activity(at: time)
             }
         case "assistant":
             // A reply without a fresh prompt still means the agent is working,
             // e.g. it picked up a finished background task.
             if turnOpen { activity(at: time) } else { openTurn(at: time) }
+            if let blocks = message?["content"] as? [[String: Any]] {
+                for block in blocks where block["type"] as? String == "tool_use" {
+                    guard let id = block["id"] as? String, let name = block["name"] as? String,
+                          !Self.toolsThatAskYou.contains(name) else { continue }
+                    runningTools.insert(id)
+                }
+            }
             // Lines are stamped when a block starts, so the final answer is still
             // streaming; the stop-hook or turn-duration record marks the end.
             if let stop = message?["stop_reason"] as? String, stop == "end_turn" || stop == "stop_sequence" {
@@ -158,18 +223,56 @@ package struct AgentLogState: Codable {
         }
     }
 
-    private enum PromptKind { case prompt, interrupt, other }
+    /// Claude Code tells the agent where a background task's output goes:
+    /// "Output is being written to: /…/tasks/<id>.output".
+    private static func outputFile(in content: Any?) -> String? {
+        let blocks = content as? [[String: Any]] ?? []
+        for block in blocks {
+            var texts: [String] = []
+            if let text = block["content"] as? String { texts.append(text) }
+            if let parts = block["content"] as? [[String: Any]] { texts += parts.compactMap { $0["text"] as? String } }
+            for text in texts {
+                guard let start = text.range(of: "Output is being written to: "),
+                      let end = text.range(of: ".output", range: start.upperBound ..< text.endIndex) else { continue }
+                return String(text[start.upperBound ..< end.upperBound])
+            }
+        }
+        return nil
+    }
+
+    /// Tools that wait on your answer, so time spent in them isn't the agent working.
+    private static let toolsThatAskYou: Set<String> = ["AskUserQuestion", "ExitPlanMode"]
+
+    /// Claude Code records how each tool call was allowed; a `user…` source means
+    /// you were asked.
+    private static func askedYou(_ decision: Any?) -> Bool {
+        guard let source = (decision as? [String: Any])?["source"] as? String else { return false }
+        return source.hasPrefix("user")
+    }
+
+    private enum PromptKind {
+        case prompt, interrupt, other
+        case toolResults([String])
+        /// A background task finished; its ID.
+        case taskNotification(String)
+    }
 
     private static func promptKind(_ content: Any?) -> PromptKind {
         var text: String?
         if let string = content as? String {
             text = string
         } else if let blocks = content as? [[String: Any]] {
-            if blocks.contains(where: { $0["type"] as? String == "tool_result" }) { return .other }
+            let results = blocks.filter { $0["type"] as? String == "tool_result" }
+            if !results.isEmpty { return .toolResults(results.compactMap { $0["tool_use_id"] as? String }) }
             text = blocks.first { $0["type"] as? String == "text" }?["text"] as? String
         }
         guard let text = text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return .other }
         if text.hasPrefix("[Request interrupted by user") { return .interrupt }
+        if text.hasPrefix("<task-notification>") {
+            guard let start = text.range(of: "<task-id>"),
+                  let end = text.range(of: "</task-id>", range: start.upperBound ..< text.endIndex) else { return .prompt }
+            return .taskNotification(String(text[start.upperBound ..< end.lowerBound]))
+        }
         // Slash commands like /clear run locally; the model isn't working.
         if text.hasPrefix("<command-name>") || text.hasPrefix("<local-command") { return .other }
         return .prompt
@@ -183,6 +286,10 @@ package struct AgentLogState: Codable {
         if sessionID == nil, head.range(of: LogScan.sessionMeta) != nil {
             readCodexHeader(line)
             return
+        }
+        if head.range(of: LogScan.threadSettings) != nil || head.range(of: LogScan.turnContext) != nil,
+           line.range(of: LogScan.approvalPolicy) != nil {
+            mayAsk = line.range(of: LogScan.approvalNever) == nil
         }
         if head.range(of: LogScan.taskStarted) != nil {
             openTurn(at: time)
@@ -206,6 +313,79 @@ package struct AgentLogState: Codable {
     }
 }
 
+/// A command the agent left running in the background (Claude Code). Whether it
+/// keeps the agent working once its turn ends depends on what the process is
+/// doing, which only the platform can see.
+package struct BackgroundTask: Codable, Equatable {
+    package var id: String
+    /// Where the task's output goes; the task's processes hold it open.
+    package var outputFile: String?
+    /// The command outran its time limit in the foreground, so the agent meant to
+    /// wait for it. Explicit background commands may be servers left running.
+    package var movedByTimeout: Bool
+
+    package init(id: String, outputFile: String?, movedByTimeout: Bool) {
+        self.id = id
+        self.outputFile = outputFile
+        self.movedByTimeout = movedByTimeout
+    }
+
+    /// The agent is waiting on this task: it's busy (a test run, a build — an
+    /// idle server isn't), or it's still alive and the agent meant to wait for it.
+    package func keepsAgentWorking(_ activity: TaskActivity) -> Bool {
+        switch activity {
+        case .busy: return true
+        case .idle: return movedByTimeout
+        case .gone: return false
+        }
+    }
+}
+
+/// What a background task's processes are doing, as seen by the platform.
+package enum TaskActivity: Equatable {
+    /// Using the CPU or writing output, wherever the work itself runs.
+    case busy
+    /// Running but quiet, like a server waiting for requests.
+    case idle
+    /// No process holds the task's output any more.
+    case gone
+}
+
+/// Turns what the platform sees of each background task at every check into
+/// `TaskActivity`. A task is busy once it has kept working — using the CPU or
+/// writing output — for `sustained`: a server's burst of startup work is over
+/// sooner, a test run or build keeps going. It stays busy through quiet
+/// stretches up to `quietAllowance`.
+package struct TaskActivityTracker {
+    package static let sustained: TimeInterval = 30
+    package static let quietAllowance: TimeInterval = 2 * 60
+
+    /// When each task's current stretch of work was first and last seen.
+    private var working: [String: (first: Date, last: Date)] = [:]
+
+    package init() {}
+
+    /// - Parameter worked: whether the task worked since the previous check;
+    ///   nil when its processes are gone.
+    package mutating func update(_ id: String, worked: Bool?, at now: Date) -> TaskActivity {
+        guard let worked else {
+            working[id] = nil
+            return .gone
+        }
+        if let stretch = working[id], now.timeIntervalSince(stretch.last) > Self.quietAllowance {
+            working[id] = nil
+        }
+        if worked { working[id] = (working[id]?.first ?? now, now) }
+        guard let stretch = working[id] else { return .idle }
+        return stretch.last.timeIntervalSince(stretch.first) >= Self.sustained ? .busy : .idle
+    }
+
+    /// Drops tasks no longer being checked.
+    package mutating func keep(only ids: Set<String>) {
+        working = working.filter { ids.contains($0.key) }
+    }
+}
+
 /// Byte-level helpers for reading JSONL without decoding every line.
 package enum LogScan {
     private static let leadingPrefix = Array("{\"timestamp\":\"".utf8)
@@ -215,6 +395,10 @@ package enum LogScan {
     package static let taskStarted = Data("\"type\":\"task_started\"".utf8)
     package static let taskComplete = Data("\"type\":\"task_complete\"".utf8)
     package static let turnAborted = Data("\"type\":\"turn_aborted\"".utf8)
+    package static let threadSettings = Data("\"type\":\"thread_settings_applied\"".utf8)
+    package static let turnContext = Data("\"type\":\"turn_context\"".utf8)
+    package static let approvalPolicy = Data("\"approval_policy\":".utf8)
+    package static let approvalNever = Data("\"approval_policy\":\"never\"".utf8)
 
     /// Codex lines start with `{"timestamp":"2026-10-12T11:10:28.253Z"`.
     package static func leadingTimestamp(in line: Data) -> Date? {

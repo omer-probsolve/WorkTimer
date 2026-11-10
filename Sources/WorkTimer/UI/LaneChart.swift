@@ -7,6 +7,7 @@ extension Worker {
         case .you: return Color(red: 0.11, green: 0.62, blue: 0.46)
         case .claude: return Color(red: 0.85, green: 0.35, blue: 0.19)
         case .codex: return Color(red: 0.50, green: 0.47, blue: 0.87)
+        case .aiWorld: return Color(red: 0.16, green: 0.56, blue: 0.85)
         }
     }
 }

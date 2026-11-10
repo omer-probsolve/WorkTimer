@@ -33,6 +33,22 @@ final class AppSettings: ObservableObject {
         didSet { defaults.set(showSecondsInMenuBar, forKey: Keys.showSeconds) }
     }
 
+    /// Show only the icon on screens with a notch, where macOS hides menu bar items
+    /// that don't fit beside it.
+    @Published var iconOnlyOnNotchedScreens: Bool {
+        didSet { defaults.set(iconOnlyOnNotchedScreens, forKey: Keys.iconOnlyOnNotch) }
+    }
+
+    /// Count the agents of AI World running on this Mac, read from its local database.
+    @Published var countAIWorld: Bool {
+        didSet { defaults.set(countAIWorld, forKey: Keys.countAIWorld) }
+    }
+
+    /// AI World's project folder (with `supabase/config.toml`); empty when not set.
+    @Published var aiWorldFolder: String {
+        didSet { defaults.set(aiWorldFolder, forKey: Keys.aiWorldFolder) }
+    }
+
     @Published var togglePanelShortcut: KeyCombo? {
         didSet { store(togglePanelShortcut, forKey: Keys.panelShortcut) }
     }
@@ -75,6 +91,8 @@ final class AppSettings: ObservableObject {
             Keys.idleMinutes: 10,
             Keys.notifications: true,
             Keys.showSeconds: true,
+            Keys.iconOnlyOnNotch: true,
+            Keys.countAIWorld: true,
             Keys.timelineStart: 0,
             Keys.timelineEnd: Self.lastMinute,
         ])
@@ -83,6 +101,9 @@ final class AppSettings: ObservableObject {
         idleMinutes = defaults.integer(forKey: Keys.idleMinutes)
         notificationsEnabled = defaults.bool(forKey: Keys.notifications)
         showSecondsInMenuBar = defaults.bool(forKey: Keys.showSeconds)
+        iconOnlyOnNotchedScreens = defaults.bool(forKey: Keys.iconOnlyOnNotch)
+        countAIWorld = defaults.bool(forKey: Keys.countAIWorld)
+        aiWorldFolder = defaults.string(forKey: Keys.aiWorldFolder) ?? ""
         timelineStartMinute = defaults.integer(forKey: Keys.timelineStart)
         timelineEndMinute = defaults.integer(forKey: Keys.timelineEnd)
         togglePanelShortcut = Self.loadShortcut(Keys.panelShortcut, default: KeyCombo(
@@ -110,6 +131,9 @@ final class AppSettings: ObservableObject {
         static let idleMinutes = "idleMinutes"
         static let notifications = "notificationsEnabled"
         static let showSeconds = "showSecondsInMenuBar"
+        static let iconOnlyOnNotch = "iconOnlyOnNotchedScreens"
+        static let countAIWorld = "countAIWorld"
+        static let aiWorldFolder = "aiWorldFolder"
         static let timelineStart = "timelineStartMinute"
         static let timelineEnd = "timelineEndMinute"
         static let panelShortcut = "togglePanelShortcut"

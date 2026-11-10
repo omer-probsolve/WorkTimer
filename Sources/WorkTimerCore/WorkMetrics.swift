@@ -27,6 +27,8 @@ package struct WorkMetrics {
         package let project: String
         package let source: String
         package let since: Date
+        /// Its turn ended; it's waiting on a background task that's still working.
+        package let waitingOnTask: Bool
     }
 
     package struct ProjectTotal: Identifiable {
@@ -92,7 +94,7 @@ package struct WorkMetrics {
     }
 
     private func isLive(_ segment: AgentSegment, now: Date) -> Bool {
-        segment.open && now.timeIntervalSince(segment.span.end) <= AgentLogState.maxSilence
+        segment.open && now.timeIntervalSince(segment.span.end) <= segment.maxSilence
     }
 
     package func yourSpans(now: Date) -> [Span] {
@@ -214,7 +216,7 @@ package struct WorkMetrics {
             let since = spans.merged(bridging: Self.rowBridge).last?.start ?? segment.span.start
             return RunningAgent(
                 worker: segment.worker, sessionID: segment.sessionID, project: segment.project,
-                source: segment.source, since: since
+                source: segment.source, since: since, waitingOnTask: segment.waitingOnTask
             )
         }
         .sorted { $0.since > $1.since }

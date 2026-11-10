@@ -15,12 +15,20 @@ agents spend working for you.
 
 - **Menu bar timer** — the clock icon turns into a running `1:23:45` while you're working,
   followed by `· 3` when Claude and Codex sessions are running (3 sessions in total).
+  On a screen with a notch it shows only the icon, so macOS doesn't hide it behind the notch
+  (the time is in its tooltip; turn this off in Settings).
   Left-click opens an at-a-glance window; right-click gives a quick Start/Stop / Auto Clock-In /
   Dashboard / Quit menu.
 - **Claude and Codex count as work** — the app reads Claude Code (terminal and the Claude
   desktop app's Code tab) and Codex app transcripts, and keeps your work session going while
   an agent is working, even when you're away from the keyboard (the icon shows ✨).
-  For each of You, Claude and Codex you get:
+- **AI World agents count too** — if AI World runs on
+  this Mac, its agent turns are read from its local database (nothing in AI World is
+  changed) and show as a fourth worker, with the engine (Claude or Codex) as the source.
+  Waits on an approval aren't counted. It starts counting from the day it's first turned on;
+  turn it off in Settings › AI World.
+
+  For each of You, Claude, Codex and AI World you get:
   - **wall clock** — time with at least one session working (parallel sessions count once);
   - **agent-hours** — every session counts (three sessions over one hour = 3h).
 
@@ -78,7 +86,13 @@ Data lives in `~/Library/Application Support/WorkTimer/sessions.json`.
 Transcripts are read from `~/.claude/projects` and `~/.codex/sessions` (incrementally, with
 a cache in `agent-cache.json`). A turn runs from your prompt to the agent's final answer;
 silences longer than 5 minutes inside a turn (e.g. waiting for a permission prompt) aren't
-counted. Subagents are covered by their parent session. Agent work from before the first
+counted, unless the agent was waiting on a command that didn't ask you anything (a long test
+run), which counts for up to an hour. When the agent's turn ends while a background task it
+started is still busy (a test run, a build), the agent shows as waiting on that task; an idle
+process it left running, like a dev server, doesn't count. Work Timer tells them apart by whether the
+task's processes keep using the CPU or writing output for at least 30 seconds — which also
+catches work running in a container or on another machine, since it streams its progress
+back, while a server goes quiet after starting up. Subagents are covered by their parent session. Agent work from before the first
 launch with this feature only shows on days you also logged time.
 
 The Claude chat tab doesn't write transcripts, so only Claude Code work counts.

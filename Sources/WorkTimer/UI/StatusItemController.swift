@@ -158,10 +158,12 @@ final class StatusItemController: NSObject, NSWindowDelegate {
             button.image = image
         }
 
-        if let sessionStart {
+        let clock = sessionStart.map { Format.clock(now.timeIntervalSince($0), seconds: settings.showSecondsInMenuBar) }
+        let iconOnly = settings.iconOnlyOnNotchedScreens && menuBarScreenHasNotch(button)
+        if let clock, !iconOnly {
             let font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
             let title = NSMutableAttributedString(
-                string: " " + Format.clock(now.timeIntervalSince(sessionStart), seconds: settings.showSecondsInMenuBar),
+                string: " " + clock,
                 attributes: [.font: font]
             )
             // Agent sessions running across Claude and Codex, dimmed so it doesn't
@@ -179,7 +181,19 @@ final class StatusItemController: NSObject, NSWindowDelegate {
         let shortcut = settings.togglePanelShortcut.map { " — \($0.displayString)" } ?? ""
         let status = store.isRunning ? "Work Timer: tracking" : running ? "Work Timer: an agent is working" : settings.autoClockIn ? "Work Timer: not tracking" : "Work Timer: auto clock-in off"
         let agents = agentSessions > 0 ? " · \(agentSessions) agent session\(agentSessions == 1 ? "" : "s") running" : ""
-        button.toolTip = status + agents + shortcut
+        // With the title hidden, the tooltip is where the time can still be read.
+        let time = iconOnly ? clock.map { " · \($0)" } ?? "" : ""
+        button.toolTip = status + time + agents + shortcut
+    }
+
+    /// Whether the menu bar the item sits in is on a screen with a notch. An item
+    /// that didn't fit beside the notch has no screen, so fall back to the screen
+    /// under the pointer, which is the one whose menu bar the user is looking at.
+    private func menuBarScreenHasNotch(_ button: NSStatusBarButton) -> Bool {
+        let screen = button.window?.screen
+            ?? NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }
+            ?? NSScreen.main
+        return (screen?.safeAreaInsets.top ?? 0) > 0
     }
 
     // MARK: - Clicks
