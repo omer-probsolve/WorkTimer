@@ -1,25 +1,12 @@
 import SwiftUI
 import WorkTimerCore
 
-extension Color {
-    /// The quiet fill behind cards, badges and hovered rows.
-    static let cardFill = Color.primary.opacity(0.05)
-    static let cardFillHover = Color.primary.opacity(0.08)
-}
-
-extension View {
-    /// The quiet rounded fill behind cards and grouped boxes.
-    func cardBackground(cornerRadius: CGFloat = StatCard.cornerRadius) -> some View {
-        background(RoundedRectangle(cornerRadius: cornerRadius).fill(Color.cardFill))
-    }
-}
-
 /// A totals card: title, a duration, an optional multiplier badge and a second
 /// line. Used for the popover's cards and the dashboard's filter cards.
 struct StatCard: View {
     enum Size { case compact, regular }
 
-    static let cornerRadius: CGFloat = 8
+    static let shape = RoundedRectangle(cornerRadius: IslandTheme.Radius.card, style: .continuous)
 
     let title: String
     let color: Color
@@ -30,33 +17,32 @@ struct StatCard: View {
     var subtitleHelp = ""
     var live = false
     var size: Size = .regular
-    /// Raised onto the window surface, like the selected segment of a picker.
+    /// Outlined: the one the session table is showing.
     var selected = false
-    var hovering = false
     /// Shows a clear button while selected.
     var onClear: (() -> Void)?
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: Self.cornerRadius)
-        VStack(alignment: .leading, spacing: size == .compact ? 1 : 2) {
+        let clock = Format.clock(value, seconds: false)
+        VStack(alignment: .leading, spacing: size == .compact ? 2 : 4) {
             HStack(spacing: 6) {
                 LiveDot(color: color, live: live, keepsSpace: false)
-                Text(title).font(.caption).foregroundStyle(color).lineLimit(1)
+                IslandLabel(title, color: color)
                 Spacer(minLength: 0)
                 if selected, let onClear {
                     Button(action: onClear) {
                         Image(systemName: "xmark")
                             .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(IslandTheme.secondary)
                     }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(.plain)
                     .help("Show all sessions")
                 }
             }
             HStack(spacing: 6) {
-                Text(Format.clock(value, seconds: false))
-                    .font(size == .compact ? .title3.weight(.medium) : .title2.weight(.medium))
-                    .monospacedDigit()
+                Text(clock)
+                    .islandNumber(size: size == .compact ? 16 : 22, value: clock)
+                    .lineLimit(1)
                 if let badge {
                     MultiplierBadge(value: badge)
                 }
@@ -68,19 +54,12 @@ struct StatCard: View {
                 .lineLimit(1)
                 .help(subtitle == nil ? "" : subtitleHelp)
         }
-        .padding(size == .compact ? 8 : 10)
+        .padding(size == .compact ? 8 : 12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            if selected {
-                shape
-                    .fill(Color(nsColor: .controlBackgroundColor))
-                    .overlay(shape.strokeBorder(Color.primary.opacity(0.18), lineWidth: 0.5))
-            } else {
-                shape.fill(hovering ? Color.cardFillHover : Color.cardFill)
-            }
-        }
+        .background(IslandTheme.card, in: Self.shape)
         .liveEdge(color, live: live)
-        .clipShape(shape)
-        .shadow(color: .black.opacity(selected ? 0.15 : 0), radius: 2, y: 1)
+        .clipShape(Self.shape)
+        .overlay(Self.shape.strokeBorder(Color.primary.opacity(selected ? 0.4 : 0), lineWidth: 1))
+        .animation(IslandTheme.spring(), value: selected)
     }
 }

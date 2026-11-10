@@ -42,10 +42,12 @@ everywhere it's needed.
 | Starting the app (stores, monitors, hotkeys, windows); the API a host such as Toolbelt uses | `WorkTimer/WorkTimerController.swift` |
 | Today's numbers, formatted, for a host's glanceable views (`WorkTimerStats`) | `WorkTimer/Store/WorkTimerStats.swift` |
 | Standalone vs hosted, the preferences domain, not running next to Toolbelt | `WorkTimer/Store/Host.swift` (`Host`, `HostCheck`) |
-| Worker colors | `Worker.color` in `WorkTimer/UI/LaneChart.swift` |
+| The shared "Island" look: UI colors (window, ink, card, row, control, hairline, the one accent), corner radii, the spring and Reduce Motion, caps labels, rolling numbers, cards, rows, sections, setting rows, buttons, segmented control | `WorkTimer/UI/IslandTheme.swift` — an identical copy of the file in every MacApp (like `Host.swift`); never edit it here, copy it from the others |
+| Work Timer's additions to the theme: track fill, soft chart box, always-dark ink card, icon and link buttons, the row appear transition | `WorkTimer/UI/IslandExtras.swift` |
+| Worker colors (data only — chrome uses `IslandTheme.accent`) | `Worker.color` in `WorkTimer/UI/LaneChart.swift` |
 | Timeline axis, lanes, lane styles, track, concurrency chart, hover line and card, week heat-map, multiplier badge | `WorkTimer/UI/LaneChart.swift` |
-| Totals cards, card fill colors, `cardBackground()` | `WorkTimer/UI/StatCard.swift` |
-| Live markers (breathing dot, dot slot, live edge) | `WorkTimer/UI/LiveIndicators.swift` |
+| Totals cards and their shape | `WorkTimer/UI/StatCard.swift` |
+| Live markers (breathing dot, dot slot, live edge); use `BreathingDot`, not the theme's `IslandLiveDot`, so the periodic refresh can't restart it | `WorkTimer/UI/LiveIndicators.swift` |
 | Session editor, CSV export box, settings form | `WorkTimer/UI/SharedViews.swift` |
 
 ## Layout

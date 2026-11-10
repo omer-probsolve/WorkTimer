@@ -12,19 +12,15 @@ extension Worker {
     }
 }
 
-extension Color {
-    /// The empty background of lanes and heat-map cells.
-    static let trackFill = Color.primary.opacity(0.06)
-}
-
 /// The time axis a chart is drawn against.
 struct ChartAxis {
     let range: DateInterval
     let ticks: [(Date, String)]
 
     /// The empty track every lane is drawn on; later drawing is clipped to it.
-    static func drawTrack(in context: inout GraphicsContext, size: CGSize) {
-        let track = Path(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: 3)
+    /// Fully rounded unless `cornerRadius` says otherwise.
+    static func drawTrack(in context: inout GraphicsContext, size: CGSize, cornerRadius: CGFloat? = nil) {
+        let track = Path(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: cornerRadius ?? size.height / 2)
         context.fill(track, with: .color(.trackFill))
         context.clip(to: track)
     }
@@ -85,16 +81,23 @@ struct LaneBar: View {
         Canvas { context, size in
             ChartAxis.drawTrack(in: &context, size: size)
             for layer in layers {
+                var bars = Path()
                 for span in layer.spans.merged() {
                     guard let rect = rect(span, size: size) else { continue }
-                    context.fill(Path(roundedRect: rect, cornerRadius: 2), with: .color(layer.color))
+                    bars.addRoundedRect(in: rect, cornerSize: CGSize(
+                        width: min(rect.width, rect.height) / 2, height: min(rect.width, rect.height) / 2
+                    ))
                 }
+                context.fill(bars, with: .color(layer.color))
                 guard showOverlap else { continue }
+                // Clipped to the bars, so the marks follow their rounded ends.
+                var inside = context
+                inside.clip(to: bars)
                 for span in Self.overlaps(layer.spans) {
                     guard var rect = rect(span, size: size) else { continue }
                     rect.origin.y = size.height * 0.62
                     rect.size.height = size.height * 0.38
-                    context.fill(Path(rect), with: .color(.black.opacity(0.3)))
+                    inside.fill(Path(rect), with: .color(.black.opacity(0.3)))
                 }
             }
         }
@@ -164,7 +167,7 @@ struct ConcurrencyBar: View {
     var body: some View {
         let peak = max(peak, 1)
         Canvas { context, size in
-            ChartAxis.drawTrack(in: &context, size: size)
+            ChartAxis.drawTrack(in: &context, size: size, cornerRadius: 6)
             // One path, filled once: separately filled steps leave darker seams
             // where their antialiased edges meet.
             var path = Path()
@@ -244,19 +247,15 @@ struct MomentCard: View {
                 line(row.title, value: row.text ?? "idle", dot: row.text == nil ? .trackFill : row.color)
                     .foregroundStyle(row.text == nil ? .tertiary : .primary)
             }
-            Divider().padding(.vertical, 2)
+            IslandDivider().padding(.vertical, 2)
             line("Workers", value: "\(workers)", dot: .secondary)
                 .fontWeight(.semibold)
         }
         .font(.caption)
         .monospacedDigit()
-        .padding(9)
-        .background(
-            RoundedRectangle(cornerRadius: 7)
-                .fill(Color(nsColor: .windowBackgroundColor))
-                .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Color.primary.opacity(0.2), lineWidth: 0.5))
-                .shadow(color: .black.opacity(0.15), radius: 6, y: 2)
-        )
+        .padding(11)
+        .islandInk()
+        .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
     }
 
     private func line(_ title: String, value: String, dot: Color) -> some View {
@@ -292,7 +291,7 @@ struct WeekHeatmapView: View {
                     ForEach(0..<24, id: \.self) { hour in
                         Stripes(colors: layers.map {
                             Self.fill($0.map.level(weekday: weekday, hour: hour), color: $0.worker.color)
-                        }, cornerRadius: 3)
+                        }, cornerRadius: 4)
                         .frame(minWidth: 8, maxWidth: .infinity, minHeight: cellHeight, maxHeight: cellHeight)
                         .help(help(weekday: weekday, hour: hour))
                     }
@@ -341,7 +340,7 @@ struct WeekHeatmapView: View {
                 ForEach(colors.indices, id: \.self) { colors[$0] }
             }
             .background(Color.trackFill)
-            .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         }
     }
 
@@ -373,20 +372,19 @@ struct WeekHeatmapView: View {
     }
 }
 
-/// A small "3.4×" pill.
+/// A small "3.4×" pill in the accent color; quiet when there's no value ("—").
 struct MultiplierBadge: View {
     let value: Double?
 
     var body: some View {
-        Text(value.map(Format.multiplier) ?? "—")
-            .font(.caption.weight(.semibold))
-            .monospacedDigit()
-            .padding(.horizontal, 6)
-            .padding(.vertical, 1)
-            .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(Color.cardFill)
-                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.primary.opacity(0.2), lineWidth: 0.5))
-            )
+        let text = value.map(Format.multiplier) ?? "—"
+        Text(text)
+            .islandNumber(size: 11, weight: .bold, value: text)
+            // The window color is the accent's contrast in both appearances:
+            // dark on mint in dark mode, light on deep green in light mode.
+            .foregroundStyle(value == nil ? IslandTheme.secondary : IslandTheme.window)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 2)
+            .background(value == nil ? IslandTheme.control : IslandTheme.accent, in: Capsule())
     }
 }

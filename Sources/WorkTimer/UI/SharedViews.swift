@@ -49,28 +49,28 @@ struct SessionEditor: View {
                 if let error {
                     Text(error.localizedDescription)
                         .font(.caption)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(IslandTheme.warning)
                 }
                 HStack {
                     Text(Format.duration(max(0, effectiveEnd.timeIntervalSince(start))))
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(IslandTheme.secondary)
                         .monospacedDigit()
                     Spacer()
                     Button("Cancel", action: onDone)
+                        .buttonStyle(IslandButtonStyle(height: 26))
                         .keyboardShortcut(.cancelAction)
                     Button("Save") { save() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(IslandButtonStyle(primary: true, height: 26))
                         .keyboardShortcut(.defaultAction)
                         .disabled(error != nil)
                 }
-                .controlSize(.small)
+                .padding(.top, 2)
             }
         }
         .datePickerStyle(.stepperField)
         .font(.callout)
-        .padding(8)
-        .background(RoundedRectangle(cornerRadius: 6).fill(Color.accentColor.opacity(0.08)))
+        .islandCard(padding: 12)
     }
 
     private func validate(end: Date, now: Date) -> SessionLog.EditError? {
@@ -130,23 +130,20 @@ struct ExportBox: View {
 
     var body: some View {
         let summary = summary
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Export CSV").font(.headline)
+                IslandLabel("Export CSV")
                 Spacer()
                 presetsMenu
                 Button(action: onClose) {
-                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(IslandTheme.secondary)
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)
                 .help("Close")
             }
 
-            Picker("", selection: $mode) {
-                ForEach(Mode.allCases) { Text($0.rawValue).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
+            IslandSegmented(Mode.allCases.map { ($0, $0.rawValue) }, selection: $mode)
+                .fixedSize()
 
             switch mode {
             case .day:
@@ -156,23 +153,22 @@ struct ExportBox: View {
                 DatePicker("To", selection: $to, displayedComponents: .date)
             case .all:
                 Text("Every session you've logged.")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(IslandTheme.secondary)
             }
 
             HStack {
                 Text("\(summary.count) session\(summary.count == 1 ? "" : "s") · \(Format.duration(summary.total))")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(IslandTheme.secondary)
                     .monospacedDigit()
                 Spacer()
                 Button("Export…", action: export)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(IslandButtonStyle(primary: true, height: 26))
                     .disabled(summary.count == 0)
             }
         }
         .datePickerStyle(.stepperField)
-        .padding(10)
-        .cardBackground()
+        .islandCard(padding: 12)
     }
 
     private var presetsMenu: some View {
@@ -234,98 +230,122 @@ struct SettingsView: View {
     @State private var notificationsDenied = false
 
     var body: some View {
-        Form {
-            Section("Automatic tracking") {
-                Toggle("Clock in when I'm active", isOn: $settings.autoClockIn)
-                Toggle("Clock out when the Mac is idle", isOn: $settings.autoClockOut)
-                Stepper(value: $settings.idleMinutes, in: AppSettings.idleMinutesRange) {
-                    Text("Idle after \(settings.idleMinutes) min")
-                        .monospacedDigit()
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                IslandSection(
+                    "Automatic tracking",
+                    footer: "Idle time isn't counted: the session ends when your last activity was. A clock-out notification lets you add it back."
+                ) {
+                    IslandToggleRow("Clock in when I'm active", isOn: $settings.autoClockIn)
+                    IslandDivider()
+                    IslandToggleRow("Clock out when the Mac is idle", isOn: $settings.autoClockOut)
+                    IslandDivider()
+                    IslandSettingRow("Idle after \(settings.idleMinutes) min") {
+                        Stepper("Idle after", value: $settings.idleMinutes, in: AppSettings.idleMinutesRange)
+                            .labelsHidden()
+                    }
+                    .monospacedDigit()
+                    .disabled(!settings.autoClockOut)
+                    .opacity(settings.autoClockOut ? 1 : 0.4)
                 }
-                .disabled(!settings.autoClockOut)
-                Text("Idle time isn't counted: the session ends when your last activity was. A clock-out notification lets you add it back.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
 
-            Section("Notifications") {
-                Toggle("Notify on automatic clock-in / out", isOn: $settings.notificationsEnabled)
-                if notificationsDenied {
-                    HStack(spacing: 6) {
-                        Text("Notifications are blocked in System Settings.")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
-                        Button("Open…") { Notifier.openSystemSettings() }
-                            .buttonStyle(.link)
-                            .font(.caption)
+                IslandSection("Notifications") {
+                    IslandToggleRow("Notify on automatic clock-in / out", isOn: $settings.notificationsEnabled)
+                    if notificationsDenied {
+                        HStack(spacing: 6) {
+                            warning("Notifications are blocked in System Settings.")
+                            Button("Open…") { Notifier.openSystemSettings() }
+                                .buttonStyle(IslandLinkButtonStyle())
+                        }
                     }
                 }
-            }
 
-            Section("Keyboard shortcuts") {
-                LabeledContent("Show / hide window") {
-                    ShortcutRecorder(combo: $settings.togglePanelShortcut)
+                IslandSection("Keyboard shortcuts") {
+                    IslandSettingRow("Show / hide window") {
+                        ShortcutRecorder(combo: $settings.togglePanelShortcut)
+                    }
+                    IslandDivider()
+                    IslandSettingRow("Start / stop timer") {
+                        ShortcutRecorder(combo: $settings.toggleTimerShortcut)
+                    }
+                    if !settings.conflictingShortcuts.isEmpty {
+                        warning("A shortcut is already used by another app — pick a different one.")
+                    }
                 }
-                LabeledContent("Start / stop timer") {
-                    ShortcutRecorder(combo: $settings.toggleTimerShortcut)
-                }
-                if !settings.conflictingShortcuts.isEmpty {
-                    Text("A shortcut is already used by another app — pick a different one.")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                }
-            }
 
-            Section("AI World") {
-                Toggle("Count AI World agents", isOn: $settings.countAIWorld)
-                LabeledContent("AI World folder") {
-                    HStack {
+                IslandSection(
+                    "AI World",
+                    footer: "Reads the agent turns of AI World running on this Mac, from its local database. Nothing in AI World is changed. Work Timer asks the Supabase CLI (supabase status) in this folder for the database's key."
+                ) {
+                    IslandToggleRow("Count AI World agents", isOn: $settings.countAIWorld)
+                    IslandDivider()
+                    IslandSettingRow("AI World folder") {
                         Text(settings.aiWorldFolder.isEmpty ? "Not set" : (settings.aiWorldFolder as NSString).abbreviatingWithTildeInPath)
-                            .foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                            .font(.system(size: 12))
+                            .foregroundStyle(IslandTheme.secondary).lineLimit(1).truncationMode(.middle)
                         Button("Choose…") { chooseAIWorldFolder() }
+                            .buttonStyle(IslandButtonStyle(height: 26))
                     }
                 }
-                Text("Reads the agent turns of AI World running on this Mac, from its local database. Nothing in AI World is changed. Work Timer asks the Supabase CLI (supabase status) in this folder for the database's key.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
 
-            Section("Timeline") {
-                DatePicker("Starts", selection: minuteBinding(\.timelineStartMinute), displayedComponents: .hourAndMinute)
-                DatePicker("Ends", selection: minuteBinding(\.timelineEndMinute), displayedComponents: .hourAndMinute)
-                Text("The hours the day timelines show, in the menu bar window and the dashboard.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section("General") {
-                Toggle("Show seconds in the menu bar", isOn: $settings.showSecondsInMenuBar)
-                Toggle("Show only the icon on screens with a notch", isOn: $settings.iconOnlyOnNotchedScreens)
-                    .help("macOS hides menu bar items that don't fit beside the notch.")
-                // A host (Toolbelt) owns the login item and quitting.
-                if !Host.isHosted {
-                    Toggle("Open at login", isOn: $launchAtLogin)
-                        .onChange(of: launchAtLogin) { _, newValue in setLaunchAtLogin(newValue) }
-                    if let loginItemError {
-                        Text(loginItemError).font(.caption).foregroundStyle(.orange)
+                IslandSection(
+                    "Timeline",
+                    footer: "The hours the day timelines show, in the menu bar window and the dashboard."
+                ) {
+                    IslandSettingRow("Starts") {
+                        DatePicker("Starts", selection: minuteBinding(\.timelineStartMinute), displayedComponents: .hourAndMinute)
+                            .labelsHidden()
+                    }
+                    IslandDivider()
+                    IslandSettingRow("Ends") {
+                        DatePicker("Ends", selection: minuteBinding(\.timelineEndMinute), displayedComponents: .hourAndMinute)
+                            .labelsHidden()
                     }
                 }
-                HStack {
-                    Button("Show Data File") {
-                        NSWorkspace.shared.activateFileViewerSelecting([store.dataFileURL])
-                    }
-                    Spacer()
+                .datePickerStyle(.stepperField)
+
+                IslandSection("General") {
+                    IslandToggleRow("Show seconds in the menu bar", isOn: $settings.showSecondsInMenuBar)
+                    IslandDivider()
+                    IslandToggleRow("Show only the icon on screens with a notch", isOn: $settings.iconOnlyOnNotchedScreens)
+                        .help("macOS hides menu bar items that don't fit beside the notch.")
+                    // A host (Toolbelt) owns the login item and quitting.
                     if !Host.isHosted {
-                        Button("Quit Work Timer") { NSApp.terminate(nil) }
+                        IslandDivider()
+                        IslandToggleRow("Open at login", isOn: $launchAtLogin)
+                            .onChange(of: launchAtLogin) { _, newValue in setLaunchAtLogin(newValue) }
+                        if let loginItemError {
+                            warning(loginItemError)
+                        }
                     }
+                    IslandDivider()
+                    HStack {
+                        Button("Show Data File") {
+                            NSWorkspace.shared.activateFileViewerSelecting([store.dataFileURL])
+                        }
+                        Spacer()
+                        if !Host.isHosted {
+                            Button("Quit Work Timer") { NSApp.terminate(nil) }
+                        }
+                    }
+                    .buttonStyle(IslandButtonStyle(height: 26))
                 }
             }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .formStyle(.grouped)
+        .tint(IslandTheme.accent)
         .onAppear {
             launchAtLogin = LaunchAtLogin.isEnabled
             Notifier().authorizationDenied { notificationsDenied = $0 }
         }
+    }
+
+    private func warning(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11))
+            .foregroundStyle(IslandTheme.warning)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     /// Edits a minutes-after-midnight setting as a time of day.

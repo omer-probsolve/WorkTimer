@@ -14,16 +14,17 @@ struct ShortcutRecorder: View {
             Button(action: { recording ? stopRecording() : startRecording() }) {
                 Text(recording ? "Type shortcut…" : (combo?.displayString ?? "None"))
                     .monospacedDigit()
-                    .frame(minWidth: 96)
+                    .frame(minWidth: 68)
             }
+            .buttonStyle(IslandButtonStyle(height: 26))
             if combo != nil && !recording {
                 Button {
                     combo = nil
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(IslandTheme.secondary)
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)
                 .help("Remove shortcut")
             }
         }

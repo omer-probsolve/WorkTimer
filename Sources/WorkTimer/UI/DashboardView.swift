@@ -74,63 +74,69 @@ struct DashboardView: View {
     var body: some View {
         VStack(spacing: 0) {
             toolbar
-            Divider()
             TimelineView(.periodic(from: .now, by: 5)) { context in
                 content(now: context.date)
             }
         }
         .frame(minWidth: 680, minHeight: 700)
+        .tint(IslandTheme.accent)
+        .islandWindow()
     }
 
     // MARK: - Toolbar
 
     private var toolbar: some View {
         HStack(spacing: 12) {
-            Picker("Group by", selection: $model.grouping) {
-                ForEach(DashboardModel.Grouping.allCases) { Text($0.rawValue).tag($0) }
+            HStack(spacing: 8) {
+                Text("Group by").font(.system(size: 12)).foregroundStyle(IslandTheme.secondary)
+                IslandSegmented(DashboardModel.Grouping.allCases.map { ($0, $0.rawValue) }, selection: $model.grouping)
             }
-            .pickerStyle(.segmented)
             .fixedSize()
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Group by")
 
             Spacer()
 
             HStack(spacing: 4) {
                 Button { model.step(-1) } label: { Image(systemName: "chevron.left") }
+                    .buttonStyle(IslandIconButtonStyle())
                 Text(model.title)
                     .font(.headline)
                     .frame(minWidth: 110)
                 Button { model.step(1) } label: { Image(systemName: "chevron.right") }
+                    .buttonStyle(IslandIconButtonStyle())
                     .disabled(model.isCurrent)
                 if !model.isCurrent {
                     Button("Today") { model.anchor = Date() }
+                        .buttonStyle(IslandButtonStyle(height: 28))
+                        .padding(.leading, 4)
                 }
             }
-            .buttonStyle(.borderless)
 
-            Picker("Period", selection: $model.period) {
-                ForEach(DashboardModel.Period.allCases) { Text($0.rawValue).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
+            IslandSegmented(DashboardModel.Period.allCases.map { ($0, $0.rawValue) }, selection: $model.period)
+                .fixedSize()
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel("Period")
 
             Spacer()
 
             Button { showExport.toggle() } label: { Image(systemName: "square.and.arrow.up") }
+                .buttonStyle(IslandIconButtonStyle())
                 .help("Export CSV")
                 .popover(isPresented: $showExport) {
                     ExportBox(store: store, onClose: { showExport = false })
                         .frame(width: 320)
                         .padding(8)
+                        .tint(IslandTheme.accent)
                 }
             Button { model.showSettings.toggle() } label: { Image(systemName: "gearshape") }
+                .buttonStyle(IslandIconButtonStyle())
                 .help("Settings")
                 .popover(isPresented: $model.showSettings) {
                     SettingsView(settings: settings, store: store)
                         .frame(width: 380, height: 520)
                 }
         }
-        .buttonStyle(.borderless)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
     }
@@ -198,13 +204,14 @@ struct DashboardView: View {
     }
 
     private func laneChart(_ lanes: [Lane], axis: ChartAxis, concurrency: [(span: Span, count: Int)], now: Date) -> some View {
-        Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 7) {
+        Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
             if lanes.isEmpty {
                 GridRow {
                     Text("No agent work in this \(model.period == .day ? "day" : "week").")
                         .foregroundStyle(.tertiary)
                         .gridCellColumns(3)
                 }
+                .transition(.opacity)
             }
             ForEach(lanes) { lane in
                 let selected = lane.filter != nil && model.filter == lane.filter
@@ -228,8 +235,9 @@ struct DashboardView: View {
                 }
                 .font(.callout)
                 .contentShape(Rectangle())
-                .onTapGesture { model.toggle(lane.filter) }
+                .onTapGesture { withAnimation(IslandTheme.spring()) { model.toggle(lane.filter) } }
                 .help(lane.filter == nil ? "" : "Click to show only this lane's sessions")
+                .transition(.opacity)
             }
             workersLane(concurrency, axis: axis)
             GridRow {
@@ -254,6 +262,7 @@ struct DashboardView: View {
                 HoverLine(x: tracks.minX + tracks.width * hover, tracks: tracks) { momentCard(lanes, at: date, now: now) }
             }
         }
+        .islandSoftCard()
     }
 
     private func momentCard(_ lanes: [Lane], at date: Date, now: Date) -> MomentCard {
@@ -279,17 +288,17 @@ struct DashboardView: View {
     private func workersLane(_ steps: [(span: Span, count: Int)], axis: ChartAxis) -> some View {
         let bar = ConcurrencyBar(steps: steps, axis: axis)
         GridRow {
-            Divider().gridCellColumns(3)
+            IslandDivider().gridCellColumns(3)
         }
         GridRow {
             HStack(spacing: 6) {
                 LiveDot(color: .clear, live: false)
-                Text("Workers").foregroundStyle(.secondary)
+                Text("Workers").foregroundStyle(IslandTheme.secondary)
             }
             .frame(width: 140, alignment: .leading)
             bar.reportsTrackFrame(in: "lanes")
             Text(bar.peak > 0 ? "max \(bar.peak)" : "—")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(IslandTheme.secondary)
                 .monospacedDigit()
                 .frame(width: 48, alignment: .trailing)
         }
@@ -301,22 +310,28 @@ struct DashboardView: View {
     private func cards(interval: DateInterval, now: Date, live: Set<Worker>) -> some View {
         HStack(spacing: 10) {
             FilterCard(card: StatCard(
-                title: "Session", color: .secondary, value: log.metrics.sessionTotal(in: interval, now: now),
+                title: "Session", color: IslandTheme.secondary, value: log.metrics.sessionTotal(in: interval, now: now),
                 badge: .some(log.metrics.leverage(in: interval, now: now)),
                 subtitle: "\(Format.clock(log.metrics.totalWork(in: interval, now: now), seconds: false)) of work",
                 subtitleHelp: Explain.leverage,
                 selected: model.filter == nil
-            ), onSelect: { model.filter = nil })
+            ), onSelect: { select(nil) })
             ForEach(Worker.allCases) { worker in
                 FilterCard(card: StatCard(
                     title: worker.name, color: worker.color, value: log.metrics.total(worker, in: interval, now: now),
                     subtitle: log.metrics.agentSummary(worker, in: interval, now: now, compact: false),
                     subtitleHelp: Explain.agent(worker),
                     live: live.contains(worker), selected: model.filter == .worker(worker),
-                    onClear: { model.filter = nil }
-                ), onSelect: { model.toggle(.worker(worker)) })
+                    onClear: { select(nil) }
+                ), onSelect: { withAnimation(IslandTheme.spring()) { model.toggle(.worker(worker)) } })
             }
         }
+    }
+
+    /// Changes the filter with the theme's spring, so the rows it adds and
+    /// removes slide rather than jump.
+    private func select(_ filter: DashboardModel.Filter?) {
+        withAnimation(IslandTheme.spring()) { model.filter = filter }
     }
 
     // MARK: - Heat map
@@ -330,17 +345,16 @@ struct DashboardView: View {
         case .project(let name): layers = log.metrics.weekHeatmaps(project: name, now: now)
         case nil: layers = log.metrics.weekHeatmaps(now: now)
         }
-        return VStack(alignment: .leading, spacing: 6) {
+        return VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text(filterTitle.map { "Hours of the week · \($0)" } ?? "Hours of the week")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                IslandLabel(filterTitle.map { "Hours of the week · \($0)" } ?? "Hours of the week")
                     .help("All time, added up across every week. Each stripe is shaded against that worker's busiest hour.")
                 Spacer()
                 WeekHeatmapView.Legend(workers: layers.map(\.worker))
             }
             WeekHeatmapView(layers: layers)
         }
+        .islandSoftCard()
     }
 
     // MARK: - Table
@@ -349,19 +363,16 @@ struct DashboardView: View {
         let entries = log.metrics.entries(in: interval, now: now).filter(matchesSelection)
         return VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text(filterTitle.map { "Sessions · \($0)" } ?? "Sessions")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                IslandLabel(filterTitle.map { "Sessions · \($0)" } ?? "Sessions")
                 if model.filter != nil {
-                    Button("Show all") { model.filter = nil }
-                        .buttonStyle(.link)
-                        .font(.caption)
+                    Button("Show all") { select(nil) }
+                        .buttonStyle(IslandLinkButtonStyle())
                 }
             }
-            .padding(.bottom, 6)
+            .padding(.horizontal, 10)
+            .padding(.bottom, 8)
 
             EntryRow.header
-            Divider()
             if entries.isEmpty {
                 Text("Nothing logged.")
                     .foregroundStyle(.tertiary)
@@ -370,12 +381,15 @@ struct DashboardView: View {
                 Spacer()
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 0) {
+                    LazyVStack(spacing: 4) {
                         ForEach(entries) { entry in
                             EntryRow(entry: entry, store: store, showDay: model.period == .week, now: now)
-                            Divider()
+                                .transition(.islandAppear)
                         }
                     }
+                    // Keyed to which rows there are, so the periodic refresh
+                    // (same rows, new numbers) animates nothing.
+                    .animation(IslandTheme.spring(), value: entries.map(\.id))
                 }
             }
         }
@@ -412,16 +426,14 @@ private struct EntryRow: View {
 
     static var header: some View {
         HStack(spacing: 8) {
-            Text("Time").frame(width: columns.time, alignment: .leading)
-            Text("Worker").frame(width: columns.worker, alignment: .leading)
-            Text("Project").frame(maxWidth: .infinity, alignment: .leading)
-            Text("Source").frame(width: columns.source, alignment: .leading)
-            Text("Worked").frame(width: columns.length, alignment: .trailing)
+            IslandLabel("Time").frame(width: columns.time, alignment: .leading)
+            IslandLabel("Worker").frame(width: columns.worker, alignment: .leading)
+            IslandLabel("Project").frame(maxWidth: .infinity, alignment: .leading)
+            IslandLabel("Source").frame(width: columns.source, alignment: .leading)
+            IslandLabel("Worked").frame(width: columns.length, alignment: .trailing)
         }
-        .font(.caption)
-        .foregroundStyle(.tertiary)
-        .padding(.horizontal, 8)
-        .padding(.bottom, 4)
+        .padding(.horizontal, 10)
+        .padding(.bottom, 6)
     }
 
     var body: some View {
@@ -439,19 +451,21 @@ private struct EntryRow: View {
                 .foregroundStyle(entry.project == nil ? .tertiary : .primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text(entry.source)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(IslandTheme.secondary)
                 .frame(width: Self.columns.source, alignment: .leading)
             Text(Format.clock(entry.worked, seconds: false))
                 .monospacedDigit()
                 .frame(width: Self.columns.length, alignment: .trailing)
         }
         .font(.callout)
-        .padding(.vertical, 5)
-        .padding(.horizontal, 8)
-        .background(RoundedRectangle(cornerRadius: 4).fill(hovering && isYours ? Color.cardFill : .clear))
+        .padding(.vertical, 7)
+        .padding(.horizontal, 10)
+        .islandRow(hovering: hovering)
         .liveEdge(entry.worker.color, live: entry.running)
+        .clipShape(RoundedRectangle(cornerRadius: IslandTheme.Radius.row, style: .continuous))
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.12), value: hovering)
         .onTapGesture(count: 2) { if isYours { editing = true } }
         .contextMenu {
             switch entry.kind {
@@ -469,6 +483,7 @@ private struct EntryRow: View {
                 SessionEditor(store: store, target: target, onDone: { editing = false })
                     .frame(width: 280)
                     .padding(8)
+                    .tint(IslandTheme.accent)
             }
         }
     }
@@ -495,14 +510,10 @@ private struct FilterCard: View {
     let card: StatCard
     let onSelect: () -> Void
 
-    @State private var hovering = false
-
     var body: some View {
-        var card = card
-        card.hovering = hovering
-        return card
-            .contentShape(RoundedRectangle(cornerRadius: StatCard.cornerRadius))
-            .onHover { hovering = $0 }
+        card
+            .contentShape(StatCard.shape)
+            .islandHoverLift()
             .onTapGesture(perform: onSelect)
             .help(card.selected ? "" : "Show only \(card.title == "Session" ? "all" : card.title) sessions")
             .accessibilityAddTraits(card.selected ? [.isButton, .isSelected] : .isButton)

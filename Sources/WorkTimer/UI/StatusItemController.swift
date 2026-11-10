@@ -127,11 +127,21 @@ final class StatusItemController: NSObject, NSWindowDelegate {
                 self?.dashboard.show(settings: showSettings)
             }
         )
-        let panel = NSPanel(contentViewController: hosting)
+        // Borderless and clear, so the view's own rounded ink shape is the
+        // window's shape; the window still takes its shadow from that shape.
+        let panel = GlancePanel(
+            contentRect: NSRect(origin: .zero, size: GlanceView.size),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        panel.contentViewController = hosting
         panel.setContentSize(GlanceView.size)
-        panel.styleMask = [.titled, .closable, .fullSizeContentView]
-        panel.titleVisibility = .hidden
-        panel.titlebarAppearsTransparent = true
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        // The content is always dark; keep AppKit-drawn controls in step.
+        panel.appearance = NSAppearance(named: .darkAqua)
         panel.isMovableByWindowBackground = true
         panel.level = .floating
         // Show over full-screen apps, on whichever Space is active.
@@ -139,9 +149,15 @@ final class StatusItemController: NSObject, NSWindowDelegate {
         panel.isReleasedWhenClosed = false
         panel.hidesOnDeactivate = false
         panel.delegate = self
-        panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
-        panel.standardWindowButton(.zoomButton)?.isHidden = true
         return panel
+    }
+
+    /// A borderless panel can't become key by default; this one must, for its
+    /// controls and for hiding when focus moves away. Esc closes it, as the
+    /// close button did when it had a title bar.
+    private final class GlancePanel: NSPanel {
+        override var canBecomeKey: Bool { true }
+        override func cancelOperation(_ sender: Any?) { orderOut(nil) }
     }
 
     // Behave like a menu bar popover: clicking elsewhere dismisses it.

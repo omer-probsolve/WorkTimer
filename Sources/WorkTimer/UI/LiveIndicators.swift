@@ -4,7 +4,9 @@ import WorkTimerCore
 /// A dot with a ring that keeps rippling outward: "working right now".
 ///
 /// Driven by the clock rather than view state, so periodic re-renders of the
-/// surrounding view don't restart the animation.
+/// surrounding view don't restart the animation — which is why this is the
+/// app's live dot rather than the theme's state-driven `IslandLiveDot`. Still
+/// with Reduce Motion on.
 struct BreathingDot: View {
     let color: Color
     var size: CGFloat = 6
@@ -12,6 +14,15 @@ struct BreathingDot: View {
     private static let period: TimeInterval = 1.4
 
     var body: some View {
+        if IslandTheme.reduceMotion {
+            Circle().fill(color).frame(width: size, height: size)
+                .accessibilityLabel("Working now")
+        } else {
+            rippling
+        }
+    }
+
+    private var rippling: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
             let phase = context.date.timeIntervalSinceReferenceDate
                 .truncatingRemainder(dividingBy: Self.period) / Self.period
