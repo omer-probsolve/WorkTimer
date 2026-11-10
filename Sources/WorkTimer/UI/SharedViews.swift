@@ -302,17 +302,22 @@ struct SettingsView: View {
                 Toggle("Show seconds in the menu bar", isOn: $settings.showSecondsInMenuBar)
                 Toggle("Show only the icon on screens with a notch", isOn: $settings.iconOnlyOnNotchedScreens)
                     .help("macOS hides menu bar items that don't fit beside the notch.")
-                Toggle("Open at login", isOn: $launchAtLogin)
-                    .onChange(of: launchAtLogin) { _, newValue in setLaunchAtLogin(newValue) }
-                if let loginItemError {
-                    Text(loginItemError).font(.caption).foregroundStyle(.orange)
+                // A host (Toolbelt) owns the login item and quitting.
+                if !Host.isHosted {
+                    Toggle("Open at login", isOn: $launchAtLogin)
+                        .onChange(of: launchAtLogin) { _, newValue in setLaunchAtLogin(newValue) }
+                    if let loginItemError {
+                        Text(loginItemError).font(.caption).foregroundStyle(.orange)
+                    }
                 }
                 HStack {
                     Button("Show Data File") {
                         NSWorkspace.shared.activateFileViewerSelecting([store.dataFileURL])
                     }
                     Spacer()
-                    Button("Quit Work Timer") { NSApp.terminate(nil) }
+                    if !Host.isHosted {
+                        Button("Quit Work Timer") { NSApp.terminate(nil) }
+                    }
                 }
             }
         }

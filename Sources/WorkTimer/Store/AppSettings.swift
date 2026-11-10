@@ -5,7 +5,7 @@ import Foundation
 final class AppSettings: ObservableObject {
     static let idleMinutesRange = 1...120
 
-    private let defaults = UserDefaults.standard
+    private let defaults = Host.defaults
 
     /// Clock in automatically when activity resumes. Turn off for personal time.
     @Published var autoClockIn: Bool {
@@ -116,7 +116,7 @@ final class AppSettings: ObservableObject {
 
     // A missing key means "use the default"; empty data means the user cleared it.
     private static func loadShortcut(_ key: String, default fallback: KeyCombo) -> KeyCombo? {
-        guard let data = UserDefaults.standard.data(forKey: key) else { return fallback }
+        guard let data = Host.defaults.data(forKey: key) else { return fallback }
         return try? JSONDecoder().decode(KeyCombo.self, from: data)
     }
 

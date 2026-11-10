@@ -1,34 +1,60 @@
 import AppKit
 import Combine
+import SwiftUI
 import WorkTimerCore
 
-@main
-enum WorkTimerApp {
-    static func main() {
-        let app = NSApplication.shared
-        let delegate = AppDelegate()
-        app.delegate = delegate
-        // Menu-bar only: no Dock icon, no app switcher entry.
-        app.setActivationPolicy(.accessory)
-        app.run()
+/// Runs Work Timer: the stores, agent monitors, auto clock-in/out, shortcuts and
+/// windows. The standalone app creates one with its own menu bar item; a host such
+/// as Toolbelt creates one with `hosted: true` and shows Work Timer in its own item.
+public final class WorkTimerController {
+    /// What Work Timer's menu bar item would show: the symbol, the running clock and
+    /// a tooltip. A host draws it in its own item.
+    public struct MenuBarAppearance {
+        public let image: NSImage?
+        public let title: NSAttributedString
+        public let toolTip: String
     }
-}
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
-    private let settings = AppSettings()
+    private let hosted: Bool
+    private let settings: AppSettings
     private let notifier = Notifier()
     private var store: SessionStore!
     private var agents: AgentMonitor!
-    private lazy var aiWorld = AIWorldMonitor { [settings] in
-        settings.aiWorldFolder.isEmpty ? nil : URL(fileURLWithPath: settings.aiWorldFolder)
-    }
+    private var aiWorld: AIWorldMonitor!
     private var log: WorkLog!
     private var tracker: TimeTracker!
     private var dashboard: DashboardWindowController!
     private var statusItem: StatusItemController!
     private var cancellables = Set<AnyCancellable>()
 
-    func applicationDidFinishLaunching(_ notification: Notification) {
+    /// When hosted: the host's menu bar button, so the window opens under it.
+    public var hostButton: (() -> NSStatusBarButton?)?
+    /// When hosted: called whenever the menu bar item should change (every second
+    /// while the clock runs).
+    public var onMenuBarChange: ((MenuBarAppearance) -> Void)?
+
+    public init(hosted: Bool) {
+        self.hosted = hosted
+        Host.isHosted = hosted
+        settings = AppSettings()
+        aiWorld = AIWorldMonitor { [settings] in
+            settings.aiWorldFolder.isEmpty ? nil : URL(fileURLWithPath: settings.aiWorldFolder)
+        }
+    }
+
+    /// The where your sessions are saved: ~/Library/Application Support/WorkTimer.
+    public static var dataDirectory: URL { AppPaths.dataDirectory }
+
+    /// The number of sessions saved, plus one when a session is running. A host
+    /// compares it with the data file to confirm nothing was lost.
+    public var sessionCount: Int {
+        guard let store else { return 0 }
+        return store.log.sessions.count + (store.log.active == nil ? 0 : 1)
+    }
+
+    public var isTracking: Bool { store?.isRunning ?? false }
+
+    public func start() {
         store = SessionStore()
         let trackingStart = agentTrackingStart()
         agents = AgentMonitor(cutoff: WorkMetrics.agentCutoff(log: store.log, trackingStart: trackingStart))
@@ -39,7 +65,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return Set(self.log.metrics.running(now: Date()).map(\.worker.name)).sorted()
         }
         dashboard = DashboardWindowController(log: log, store: store, settings: settings)
-        statusItem = StatusItemController(log: log, settings: settings, tracker: tracker, dashboard: dashboard)
+        if hosted {
+            statusItem = StatusItemController(
+                log: log, settings: settings, tracker: tracker, dashboard: dashboard,
+                hostButton: { [weak self] in self?.hostButton?() },
+                onAppearance: { [weak self] appearance in
+                    self?.onMenuBarChange?(MenuBarAppearance(
+                        image: appearance.image, title: appearance.title, toolTip: appearance.toolTip
+                    ))
+                }
+            )
+        } else {
+            statusItem = StatusItemController(log: log, settings: settings, tracker: tracker, dashboard: dashboard)
+        }
 
         // Editing a session onto an earlier day makes that day's agent work count.
         store.$log
@@ -62,19 +100,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         registerHotKeys()
         observeExternalTrigger()
         tracker.start()
-        enableLoginItemOnFirstRun()
+        if !hosted { enableLoginItemOnFirstRun() }
     }
 
-    func applicationWillTerminate(_ notification: Notification) {
+    /// Ends a running session cleanly; call when the app quits.
+    public func stop() {
         HotKeyManager.shared.unregisterAll()
         tracker?.stopForQuit()
     }
 
-    /// Opening the app again from /Applications or Spotlight shows the popover.
-    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        statusItem.showPopover()
-        return false
+    // MARK: - For hosts
+
+    /// The quick menu's items (start/stop, auto clock-in, windows), for a host's menu.
+    public func menuItems() -> [NSMenuItem] {
+        statusItem?.menuItems(includeQuit: false) ?? []
     }
+
+    /// The menu bar window (today at a glance).
+    public func showWindow() { statusItem?.showPopover() }
+
+    public func toggleWindow() { statusItem?.togglePopover() }
+
+    public func showDashboard() { dashboard?.show() }
+
+    public func toggleTimer() { tracker?.toggle() }
+
+    /// Clock in automatically when you're active.
+    public var autoClockIn: Bool {
+        get { settings.autoClockIn }
+        set { settings.autoClockIn = newValue }
+    }
+
+    /// Today's numbers, ready to display.
+    public func stats(now: Date = Date()) -> WorkTimerStats? {
+        guard let log else { return nil }
+        return WorkTimerStats.make(log.metrics, autoClockIn: settings.autoClockIn, now: now)
+    }
+
+    /// Work Timer's settings form, for a host's settings page.
+    public func makeSettingsView() -> AnyView {
+        AnyView(SettingsView(settings: settings, store: store))
+    }
+
+    // MARK: -
 
     /// Lets other tools (Shortcuts, Raycast, a shell script) open the windows:
     /// post the `…showPanel` or `…showDashboard` distributed notification.
@@ -175,9 +243,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// days you logged time yourself.
     private func agentTrackingStart() -> Date {
         let key = "agentTrackingStart"
-        if let date = UserDefaults.standard.object(forKey: key) as? Date { return date }
+        if let date = Host.defaults.object(forKey: key) as? Date { return date }
         let today = Calendar.current.startOfDay(for: Date())
-        UserDefaults.standard.set(today, forKey: key)
+        Host.defaults.set(today, forKey: key)
         return today
     }
 
@@ -185,8 +253,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// on first launch. Done once only — if turned off in Settings, it stays off.
     private func enableLoginItemOnFirstRun() {
         let key = "didAttemptInitialLoginItemRegistration"
-        guard !UserDefaults.standard.bool(forKey: key) else { return }
-        UserDefaults.standard.set(true, forKey: key)
+        guard !Host.defaults.bool(forKey: key) else { return }
+        Host.defaults.set(true, forKey: key)
         try? LaunchAtLogin.set(true)
     }
 }

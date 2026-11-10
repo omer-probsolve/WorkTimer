@@ -38,7 +38,10 @@ everywhere it's needed.
 | Whether a background task's processes worked since the last check on macOS (CPU, file writes) | `WorkTimer/Agents/TaskProbe.swift` |
 | Publishing `WorkMetrics` to the macOS UI | `WorkTimer/Store/WorkLog.swift` |
 | Data folder and transcripts home locations | `WorkTimer/Store/AppPaths.swift` |
-| Preferences | `WorkTimer/Store/AppSettings.swift` |
+| Preferences | `WorkTimer/Store/AppSettings.swift` (always through `Host.defaults`, never `UserDefaults.standard`) |
+| Starting the app (stores, monitors, hotkeys, windows); the API a host such as Toolbelt uses | `WorkTimer/WorkTimerController.swift` |
+| Today's numbers, formatted, for a host's glanceable views (`WorkTimerStats`) | `WorkTimer/Store/WorkTimerStats.swift` |
+| Standalone vs hosted, the preferences domain, not running next to Toolbelt | `WorkTimer/Store/Host.swift` (`Host`, `HostCheck`) |
 | Worker colors | `Worker.color` in `WorkTimer/UI/LaneChart.swift` |
 | Timeline axis, lanes, lane styles, track, concurrency chart, hover line and card, week heat-map, multiplier badge | `WorkTimer/UI/LaneChart.swift` |
 | Totals cards, card fill colors, `cardBackground()` | `WorkTimer/UI/StatCard.swift` |
@@ -50,7 +53,9 @@ everywhere it's needed.
 - `Sources/WorkTimerCore`: platform-free logic, **Foundation only** — no SwiftUI, AppKit,
   Combine or other Apple-only frameworks, so a Windows or Linux app can reuse it. Types are
   `package` access: visible to every target in this package, not a public API.
-- `Sources/WorkTimer`: the macOS app.
+- `Sources/WorkTimer` (target `WorkTimerKit`): the macOS app as a library, so Toolbelt
+  (`../Toolbelt`) can host it. `Sources/WorkTimerApp` is the standalone app's `App.swift`,
+  which only starts `WorkTimerController`.
   - `Store`, `Agents`: thin `ObservableObject` wrappers that run the core, publish its results
     and save them. Keep logic out of them.
   - `System`: macOS integration (idle detection, hotkeys and `KeyCombo`, login item,

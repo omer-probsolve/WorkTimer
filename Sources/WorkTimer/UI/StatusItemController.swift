@@ -10,7 +10,19 @@ import WorkTimerCore
 /// popover gets clipped at the top, and a popover can't be shown at all when the
 /// menu bar is hidden by a full-screen app.
 final class StatusItemController: NSObject, NSWindowDelegate {
-    private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+    /// What the menu bar item shows. A host draws it in its own item.
+    struct Appearance {
+        var image: NSImage?
+        var title: NSAttributedString
+        var toolTip: String
+    }
+
+    /// Nil when hosted: the host owns the menu bar item.
+    private let statusItem: NSStatusItem?
+    /// When hosted, the host's menu bar button, for placing the panel under it.
+    private let hostButton: (() -> NSStatusBarButton?)?
+    /// When hosted, receives what the menu bar item should show.
+    private let onAppearance: ((Appearance) -> Void)?
     private lazy var panel: NSPanel = makePanel()
     /// When the panel last hid itself because focus moved away.
     private var lastAutoHide = Date.distantPast
@@ -22,15 +34,29 @@ final class StatusItemController: NSObject, NSWindowDelegate {
     private var refreshTimer: Timer?
     private var cancellables = Set<AnyCancellable>()
 
-    init(log: WorkLog, settings: AppSettings, tracker: TimeTracker, dashboard: DashboardWindowController) {
+    /// Pass `hostButton` and `onAppearance` to run inside a host that owns the menu
+    /// bar item; leave them out to show Work Timer's own item.
+    init(
+        log: WorkLog,
+        settings: AppSettings,
+        tracker: TimeTracker,
+        dashboard: DashboardWindowController,
+        hostButton: (() -> NSStatusBarButton?)? = nil,
+        onAppearance: ((Appearance) -> Void)? = nil
+    ) {
         self.log = log
         self.store = log.store
         self.settings = settings
         self.tracker = tracker
         self.dashboard = dashboard
+        self.hostButton = hostButton
+        self.onAppearance = onAppearance
+        self.statusItem = onAppearance == nil
+            ? NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+            : nil
         super.init()
 
-        if let button = statusItem.button {
+        if let button = statusItem?.button {
             button.target = self
             button.action = #selector(statusItemClicked)
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -73,7 +99,7 @@ final class StatusItemController: NSObject, NSWindowDelegate {
     /// screen the mouse is on.
     private func position(_ panel: NSPanel) {
         let size = panel.frame.size
-        if let button = statusItem.button, let anchor = onScreenFrame(of: button),
+        if let button = menuBarButton, let anchor = onScreenFrame(of: button),
            let visible = button.window?.screen?.visibleFrame {
             let x = min(max(anchor.midX - size.width / 2, visible.minX + 8), visible.maxX - size.width - 8)
             panel.setFrameOrigin(NSPoint(x: x, y: visible.maxY - size.height - 6))
@@ -133,8 +159,30 @@ final class StatusItemController: NSObject, NSWindowDelegate {
 
     // MARK: - Menu bar rendering
 
+    /// The menu bar button the panel hangs from: ours, or the host's.
+    private var menuBarButton: NSStatusBarButton? {
+        statusItem?.button ?? hostButton?()
+    }
+
     private func refresh() {
-        guard let button = statusItem.button else { return }
+        guard let button = menuBarButton else { return }
+        let appearance = currentAppearance(button)
+        if let onAppearance {
+            onAppearance(appearance)
+            return
+        }
+        if button.image?.name() != appearance.image?.name() {
+            button.image = appearance.image
+        }
+        if appearance.title.length > 0 {
+            button.attributedTitle = appearance.title
+        } else if !button.title.isEmpty {
+            button.title = ""
+        }
+        button.toolTip = appearance.toolTip
+    }
+
+    private func currentAppearance(_ button: NSStatusBarButton) -> Appearance {
         let now = Date()
         let metrics = log.metrics
         let sessionStart = metrics.currentSessionStart(now: now)
@@ -153,19 +201,14 @@ final class StatusItemController: NSObject, NSWindowDelegate {
         }
         let image = NSImage(systemSymbolName: symbol, accessibilityDescription: "Work Timer")
         image?.isTemplate = true
-        if button.image?.name() != symbol {
-            image?.setName(symbol)
-            button.image = image
-        }
+        image?.setName(symbol)
 
         let clock = sessionStart.map { Format.clock(now.timeIntervalSince($0), seconds: settings.showSecondsInMenuBar) }
         let iconOnly = settings.iconOnlyOnNotchedScreens && menuBarScreenHasNotch(button)
+        let title = NSMutableAttributedString()
         if let clock, !iconOnly {
             let font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-            let title = NSMutableAttributedString(
-                string: " " + clock,
-                attributes: [.font: font]
-            )
+            title.append(NSAttributedString(string: " " + clock, attributes: [.font: font]))
             // Agent sessions running across Claude and Codex, dimmed so it doesn't
             // read as part of the time.
             if agentSessions > 0 {
@@ -173,9 +216,6 @@ final class StatusItemController: NSObject, NSWindowDelegate {
                     .font: font, .foregroundColor: NSColor.secondaryLabelColor,
                 ]))
             }
-            button.attributedTitle = title
-        } else if !button.title.isEmpty {
-            button.title = ""
         }
 
         let shortcut = settings.togglePanelShortcut.map { " — \($0.displayString)" } ?? ""
@@ -183,7 +223,7 @@ final class StatusItemController: NSObject, NSWindowDelegate {
         let agents = agentSessions > 0 ? " · \(agentSessions) agent session\(agentSessions == 1 ? "" : "s") running" : ""
         // With the title hidden, the tooltip is where the time can still be read.
         let time = iconOnly ? clock.map { " · \($0)" } ?? "" : ""
-        button.toolTip = status + time + agents + shortcut
+        return Appearance(image: image, title: title, toolTip: status + time + agents + shortcut)
     }
 
     /// Whether the menu bar the item sits in is on a screen with a notch. An item
@@ -208,6 +248,16 @@ final class StatusItemController: NSObject, NSWindowDelegate {
     }
 
     private func showQuickMenu() {
+        guard let statusItem else { return }
+        let menu = NSMenu()
+        menuItems(includeQuit: true).forEach(menu.addItem)
+        statusItem.menu = menu
+        statusItem.button?.performClick(nil)
+        statusItem.menu = nil
+    }
+
+    /// The quick menu's items, also shown in a host's menu (without Quit).
+    func menuItems(includeQuit: Bool) -> [NSMenuItem] {
         let menu = NSMenu()
 
         let toggle = NSMenuItem(
@@ -233,13 +283,15 @@ final class StatusItemController: NSObject, NSWindowDelegate {
         dashboardItem.target = self
         menu.addItem(dashboardItem)
 
-        let quit = NSMenuItem(title: "Quit Work Timer", action: #selector(quit), keyEquivalent: "q")
-        quit.target = self
-        menu.addItem(quit)
+        if includeQuit {
+            let quit = NSMenuItem(title: "Quit Work Timer", action: #selector(quit), keyEquivalent: "q")
+            quit.target = self
+            menu.addItem(quit)
+        }
 
-        statusItem.menu = menu
-        statusItem.button?.performClick(nil)
-        statusItem.menu = nil
+        let items = menu.items
+        menu.removeAllItems()
+        return items
     }
 
     @objc private func toggleTimer() { tracker.toggle() }
