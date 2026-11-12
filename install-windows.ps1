@@ -23,7 +23,7 @@ foreach ($runtimeBin in $runtimeBins) {
 }
 New-Item -ItemType Directory -Path $dataDirectory -Force | Out-Null
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-& icacls $dataDirectory /inheritance:r /grant:r "$($identity.User.Value):(OI)(CI)F" 'SYSTEM:(OI)(CI)F' | Out-Null
+& icacls $dataDirectory /inheritance:r /grant:r "*$($identity.User.Value):(OI)(CI)F" '*S-1-5-18:(OI)(CI)F' | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'Could not protect the local collector data folder.' }
 $executable = Join-Path $destination 'WorkTimerCollector.exe'
 $action = New-ScheduledTaskAction -Execute $executable -Argument "--data-dir `"$dataDirectory`"" -WorkingDirectory $destination
