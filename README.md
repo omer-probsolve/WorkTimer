@@ -104,3 +104,9 @@ Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
 ## License
 
 [MIT](LICENSE)
+
+## Windows agents
+
+A native Windows background collector can save Claude Code and Codex activity offline and
+sync it directly to this Mac over the LAN. History and live activity appear in this dashboard,
+including when hosted by Toolbelt. See [setup and pairing](docs/windows-sync.md).

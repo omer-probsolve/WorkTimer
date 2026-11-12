@@ -13,4 +13,19 @@ jobs:
       - name: Build
         run: swift build
       - name: Test
-        run: swift test
+        run: WORKTIMER_DATA_DIR="$RUNNER_TEMP/worktimer-tests" swift test
+
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install official Swift toolchain
+        shell: pwsh
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP 'swift.exe'
+          Invoke-WebRequest 'https://download.swift.org/swift-6.4.2-release/windows10/swift-6.4.2-RELEASE/swift-6.4.2-RELEASE-windows10.exe' -OutFile $installer
+          $process = Start-Process -FilePath $installer -ArgumentList '/quiet', '/norestart' -WindowStyle Hidden -Wait -PassThru
+          if ($process.ExitCode -notin @(0, 3010)) { throw 'Swift installation failed.' }
+      - name: Build and test
+        shell: pwsh
+        run: ./build-windows.ps1 -Release -Test

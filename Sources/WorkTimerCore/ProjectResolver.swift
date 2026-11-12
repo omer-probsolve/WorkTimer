@@ -11,13 +11,13 @@ package enum ProjectResolver {
         lock.lock()
         defer { lock.unlock() }
         if let cached = cache[cwd] { return cached }
-        let name = resolve(cwd)
+        let name = resolve(cwd.replacingOccurrences(of: "\\", with: "/"))
         cache[cwd] = name
         return name
     }
 
     private static func resolve(_ cwd: String) -> String {
-        let home = NSHomeDirectory()
+        let home = NSHomeDirectory().replacingOccurrences(of: "\\", with: "/")
         if let root = repositoryRoot(containing: cwd) {
             return (root as NSString).lastPathComponent
         }
@@ -49,14 +49,16 @@ package enum ProjectResolver {
                 // A worktree: `.git` is a file saying "gitdir: <repo>/.git/worktrees/<name>".
                 if let contents = try? String(contentsOfFile: git, encoding: .utf8),
                    let line = contents.split(separator: "\n").first(where: { $0.hasPrefix("gitdir:") }) {
-                    let gitdir = line.dropFirst("gitdir:".count).trimmingCharacters(in: .whitespaces)
+                    let gitdir = line.dropFirst("gitdir:".count).trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "\\", with: "/")
                     if let range = gitdir.range(of: "/.git/") {
                         return String(gitdir[..<range.lowerBound])
                     }
                 }
                 return directory
             }
-            directory = (directory as NSString).deletingLastPathComponent
+            let parent = (directory as NSString).deletingLastPathComponent
+            if parent == directory { break }
+            directory = parent
         }
         return nil
     }

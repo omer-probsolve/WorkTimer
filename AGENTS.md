@@ -38,6 +38,10 @@ everywhere it's needed.
 | Whether a background task's processes worked since the last check on macOS (CPU, file writes) | `WorkTimer/Agents/TaskProbe.swift` |
 | Publishing `WorkMetrics` to the macOS UI | `WorkTimer/Store/WorkLog.swift` |
 | Data folder and transcripts home locations | `WorkTimer/Store/AppPaths.swift` |
+| Normalized Windows history, transactional outbox, revisions, replay and import merging | `WorkTimerCore/AgentSync.swift` |
+| Windows LAN routing, pinned HTTPS, discovery and file watching | `WorkTimerWindows/Windows.c` |
+| Windows collection and delivery lifecycle | `WorkTimerCollector/main.swift` |
+| Mac TLS receiver, pairing and imported activity publication (standalone and hosted) | `WorkTimer/Agents/LANSyncReceiver.swift` |
 | Preferences | `WorkTimer/Store/AppSettings.swift` (always through `Host.defaults`, never `UserDefaults.standard`) |
 | Starting the app (stores, monitors, hotkeys, windows); the API a host such as Toolbelt uses | `WorkTimer/WorkTimerController.swift` |
 | Today's numbers, formatted, for a host's glanceable views (`WorkTimerStats`) | `WorkTimer/Store/WorkTimerStats.swift` |
@@ -105,5 +109,8 @@ supplies only what the core leaves to the platform: UI, idle detection, file wat
 `segments(taskActivity:)`), hotkeys, notifications and where data is stored. Don't
 fork the logic per platform — if the core is missing something, add it to the core.
 
-Known gaps for Windows: transcript locations and `ProjectResolver` assume `/`-separated paths
-under the home folder, and the Claude Code / Codex transcript layout there is unverified.
+Windows: `build-windows.ps1 -Release -Test` builds the native collector and runs the shared
+core tests. `install-windows.ps1` installs its per-user login task. See `docs/windows-sync.md`
+for pairing, persistence and platform limits. `CLAUDE_CONFIG_DIR` and `CODEX_HOME` override
+the default roots; Windows separators are normalized for project resolution. No stopped WSL
+distribution is started or scanned automatically.
