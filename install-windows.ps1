@@ -2,7 +2,7 @@ param([switch]$SkipBuild)
 $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath $PSScriptRoot
 if (!$SkipBuild) { & (Join-Path $PSScriptRoot 'build-windows.ps1') -Release -Test }
-else { . (Join-Path $PSScriptRoot 'Tools\SwiftEnvironment.ps1') }
+. (Join-Path $PSScriptRoot 'Tools\SwiftEnvironment.ps1')
 $binPath = & swift build -c release --show-bin-path
 if ($LASTEXITCODE -ne 0) { throw 'Could not locate the release build.' }
 $binary = Join-Path $binPath 'WorkTimerCollector.exe'
