@@ -9,6 +9,7 @@ final class WorkLog: ObservableObject {
     let agents: AgentMonitor
     let aiWorld: AIWorldMonitor
     let trackingStart: Date
+    let sync = LANSyncReceiver.shared
 
     /// Every agent's segments, transcripts and AI World together, oldest first.
     private var segments: [AgentSegment] = []
@@ -19,9 +20,9 @@ final class WorkLog: ObservableObject {
         self.agents = agents
         self.aiWorld = aiWorld
         self.trackingStart = trackingStart
-        agents.$segments.combineLatest(aiWorld.$segments)
-            .sink { [weak self] transcripts, aiWorld in
-                self?.segments = (transcripts + aiWorld).sorted { $0.span.start < $1.span.start }
+        agents.$segments.combineLatest(aiWorld.$segments, sync.$segments)
+            .sink { [weak self] transcripts, aiWorld, imported in
+                self?.segments = ImportedHistory.merge(local: transcripts + aiWorld, imported: imported)
                 self?.objectWillChange.send()
             }
             .store(in: &cancellables)

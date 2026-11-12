@@ -1,38 +1,29 @@
 // swift-tools-version: 5.9
 import PackageDescription
 
+var products: [Product] = [.executable(name: "WorkTimerCollector", targets: ["WorkTimerCollector"])]
+var targets: [Target] = [
+    .target(name: "WorkTimerCore", path: "Sources/WorkTimerCore"),
+    .target(name: "WorkTimerWindows", path: "Sources/WorkTimerWindows", linkerSettings: [
+        .linkedLibrary("winhttp", .when(platforms: [.windows])),
+        .linkedLibrary("crypt32", .when(platforms: [.windows])),
+        .linkedLibrary("iphlpapi", .when(platforms: [.windows])),
+        .linkedLibrary("ws2_32", .when(platforms: [.windows])),
+        .linkedLibrary("dnsapi", .when(platforms: [.windows])),
+    ]),
+    .executableTarget(name: "WorkTimerCollector", dependencies: ["WorkTimerCore", "WorkTimerWindows"]),
+    .testTarget(name: "WorkTimerCoreTests", dependencies: ["WorkTimerCore"], path: "Tests/WorkTimerCoreTests"),
+]
+#if os(macOS)
+products += [.library(name: "WorkTimerKit", targets: ["WorkTimerKit"]),
+             .executable(name: "WorkTimer", targets: ["WorkTimer"])]
+targets += [.target(name: "WorkTimerKit", dependencies: ["WorkTimerCore"], path: "Sources/WorkTimer"),
+            .executableTarget(name: "WorkTimer", dependencies: ["WorkTimerKit"], path: "Sources/WorkTimerApp")]
+#endif
+
 let package = Package(
     name: "WorkTimer",
     platforms: [.macOS(.v14)],
-    products: [
-        // The whole macOS app as a library, so a launcher (Toolbelt) can host it.
-        .library(name: "WorkTimerKit", targets: ["WorkTimerKit"]),
-        .executable(name: "WorkTimer", targets: ["WorkTimer"]),
-    ],
-    targets: [
-        // Platform-free logic: sessions, agent transcripts, totals and formatting.
-        // Foundation only, so other platforms' apps can share it.
-        .target(
-            name: "WorkTimerCore",
-            path: "Sources/WorkTimerCore"
-        ),
-        // The macOS app: menu bar item, windows, tracking. `WorkTimerController` is
-        // its entry point, used by the standalone app below and by hosts.
-        .target(
-            name: "WorkTimerKit",
-            dependencies: ["WorkTimerCore"],
-            path: "Sources/WorkTimer"
-        ),
-        // The standalone "Work Timer.app": just starts the controller.
-        .executableTarget(
-            name: "WorkTimer",
-            dependencies: ["WorkTimerKit"],
-            path: "Sources/WorkTimerApp"
-        ),
-        .testTarget(
-            name: "WorkTimerCoreTests",
-            dependencies: ["WorkTimerCore"],
-            path: "Tests/WorkTimerCoreTests"
-        ),
-    ]
+    products: products,
+    targets: targets
 )

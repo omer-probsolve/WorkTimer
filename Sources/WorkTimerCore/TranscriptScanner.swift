@@ -1,7 +1,7 @@
 import Foundation
 
 /// A stretch of time an agent spent working on one session.
-package struct AgentSegment: Equatable {
+package struct AgentSegment: Equatable, Codable {
     package var worker: Worker
     package var sessionID: String
     package var project: String
@@ -16,6 +16,9 @@ package struct AgentSegment: Equatable {
     /// The agent's turn ended but it's waiting on a background task that's still
     /// working, so the session stays open (and `notWaitingOnYou`).
     package var waitingOnTask: Bool
+    /// Imported activity is live only while its independently refreshed lease lasts.
+    package var liveUntil: Date? = nil
+    package var imported: Bool = false
 
     package init(worker: Worker, sessionID: String, project: String, source: String, span: Span, open: Bool,
                  notWaitingOnYou: Bool = false, waitingOnTask: Bool = false) {
@@ -57,9 +60,12 @@ package final class TranscriptScanner {
     private static let cacheVersion = 3
     private static let chunkSize = 8 << 20
 
-    package init(home: String = NSHomeDirectory(), cacheURL: URL, cutoff: Date) {
-        claudeRoot = home + "/.claude/projects"
-        codexRoots = [home + "/.codex/sessions", home + "/.codex/archived_sessions"]
+    package init(home: String = NSHomeDirectory(), cacheURL: URL, cutoff: Date,
+                 environment: [String: String] = ProcessInfo.processInfo.environment) {
+        let claude = environment["CLAUDE_CONFIG_DIR"].flatMap { $0.isEmpty ? nil : $0 } ?? home + "/.claude"
+        let codex = environment["CODEX_HOME"].flatMap { $0.isEmpty ? nil : $0 } ?? home + "/.codex"
+        claudeRoot = URL(fileURLWithPath: claude).appendingPathComponent("projects").path
+        codexRoots = ["sessions", "archived_sessions"].map { URL(fileURLWithPath: codex).appendingPathComponent($0).path }
         self.cacheURL = cacheURL
         self.cutoff = cutoff
     }
@@ -115,7 +121,7 @@ package final class TranscriptScanner {
                 taskActivity[task.id].map(task.keepsAgentWorking) ?? false
             }
             let project = ProjectResolver.name(for: state.cwd)
-            let session = state.sessionID ?? UUID().uuidString
+            guard let session = state.sessionID else { continue }
             let source = state.source ?? "Unknown"
             let spans = state.allSegments
             for (index, span) in spans.enumerated() {

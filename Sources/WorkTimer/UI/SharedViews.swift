@@ -232,6 +232,7 @@ struct SettingsView: View {
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
     @State private var loginItemError: String?
     @State private var notificationsDenied = false
+    @ObservedObject private var sync = LANSyncReceiver.shared
 
     var body: some View {
         Form {
@@ -274,6 +275,22 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.orange)
                 }
+            }
+
+            Section("Windows activity") {
+                Text(sync.status).font(.caption).foregroundStyle(.secondary)
+                if sync.enabled {
+                    Button("Export Windows pairing file…") {
+                        let panel = NSSavePanel()
+                        panel.nameFieldStringValue = "worktimer-pairing.json"
+                        if panel.runModal() == .OK, let url = panel.url { sync.exportPairing(to: url) }
+                    }
+                    Button("Turn off LAN sync") { sync.disable() }
+                } else {
+                    Button("Enable LAN sync") { sync.enable() }
+                }
+                Text("Windows saves activity offline and sends it when both devices share a LAN. Pair once using the exported file. Work Timer or Toolbelt must be running on this Mac to receive updates.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
 
             Section("AI World") {

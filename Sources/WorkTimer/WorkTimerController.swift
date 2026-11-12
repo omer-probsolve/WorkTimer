@@ -87,6 +87,7 @@ public final class WorkTimerController {
             }
             .store(in: &cancellables)
         agents.start()
+        LANSyncReceiver.shared.start()
         settings.$countAIWorld
             .removeDuplicates()
             .sink { [weak self] enabled in self?.aiWorld.setEnabled(enabled) }

@@ -86,7 +86,7 @@ package struct WorkMetrics {
             .union(log.active.map { [calendar.startOfDay(for: $0.start)] } ?? [])
         return segments.compactMap { segment in
             let day = calendar.startOfDay(for: segment.span.start)
-            guard day >= trackingStart || yourDays.contains(day) else { return nil }
+            guard segment.imported || day >= trackingStart || yourDays.contains(day) else { return nil }
             var segment = segment
             if isLive(segment, now: now) { segment.span.end = now }
             return segment
@@ -94,7 +94,8 @@ package struct WorkMetrics {
     }
 
     private func isLive(_ segment: AgentSegment, now: Date) -> Bool {
-        segment.open && now.timeIntervalSince(segment.span.end) <= segment.maxSilence
+        segment.open && (segment.liveUntil.map { now < $0 } ?? true)
+            && now >= segment.span.end && now.timeIntervalSince(segment.span.end) <= segment.maxSilence
     }
 
     package func yourSpans(now: Date) -> [Span] {
