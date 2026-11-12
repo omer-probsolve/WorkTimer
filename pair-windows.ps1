@@ -11,6 +11,8 @@ for ($attempt = 0; $attempt -lt 20; $attempt++) {
     Start-Sleep -Milliseconds 250
 }
 try {
+    . (Join-Path $PSScriptRoot 'Tools\StopCollector.ps1')
+    Stop-WorkTimerCollector -Executable $executable
     $collectorArguments = @('--data-dir', $dataDirectory, '--pair', $pairingPath)
     if ($MacHost) { $collectorArguments += @('--host', $MacHost) }
     & $executable @collectorArguments

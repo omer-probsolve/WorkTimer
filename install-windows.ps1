@@ -16,6 +16,8 @@ for ($attempt = 0; $existing -and $attempt -lt 20; $attempt++) {
     if ((Get-ScheduledTask -TaskName $taskName).State -ne 'Running') { break }
     Start-Sleep -Milliseconds 250
 }
+. (Join-Path $PSScriptRoot 'Tools\StopCollector.ps1')
+Stop-WorkTimerCollector -Executable (Join-Path $destination 'WorkTimerCollector.exe')
 New-Item -ItemType Directory -Path $destination -Force | Out-Null
 Copy-Item -LiteralPath $binary -Destination $destination -Force
 foreach ($runtimeBin in $runtimeBins) {
