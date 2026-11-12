@@ -26,7 +26,16 @@ $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
 & icacls $dataDirectory /inheritance:r /grant:r "*$($identity.User.Value):(OI)(CI)F" '*S-1-5-18:(OI)(CI)F' | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'Could not protect the local collector data folder.' }
 $executable = Join-Path $destination 'WorkTimerCollector.exe'
-$action = New-ScheduledTaskAction -Execute $executable -Argument "--data-dir `"$dataDirectory`"" -WorkingDirectory $destination
+$launcherPath = Join-Path $destination 'run-collector.ps1'
+@'
+$ErrorActionPreference = 'Stop'
+$collector = Join-Path $PSScriptRoot 'WorkTimerCollector.exe'
+$dataDirectory = Join-Path $env:USERPROFILE 'AppData\Local\WorkTimer'
+& $collector --data-dir $dataDirectory
+exit $LASTEXITCODE
+'@ | Set-Content -LiteralPath $launcherPath -Encoding UTF8
+$powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+$action = New-ScheduledTaskAction -Execute $powershell -Argument "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$launcherPath`"" -WorkingDirectory $destination
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $identity.Name
 $principal = New-ScheduledTaskPrincipal -UserId $identity.Name -LogonType Interactive -RunLevel Limited
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -MultipleInstances IgnoreNew
