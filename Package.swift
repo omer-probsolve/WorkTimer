@@ -18,7 +18,8 @@ var targets: [Target] = [
 products += [.library(name: "WorkTimerKit", targets: ["WorkTimerKit"]),
              .executable(name: "WorkTimer", targets: ["WorkTimer"])]
 targets += [.target(name: "WorkTimerKit", dependencies: ["WorkTimerCore"], path: "Sources/WorkTimer"),
-            .executableTarget(name: "WorkTimer", dependencies: ["WorkTimerKit"], path: "Sources/WorkTimerApp")]
+            .executableTarget(name: "WorkTimer", dependencies: ["WorkTimerKit"], path: "Sources/WorkTimerApp"),
+            .testTarget(name: "WorkTimerLANTests", dependencies: ["WorkTimerKit", "WorkTimerCore"])]
 #endif
 
 let package = Package(

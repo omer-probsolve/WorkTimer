@@ -17,7 +17,7 @@ package enum ProjectResolver {
     }
 
     private static func resolve(_ cwd: String) -> String {
-        let home = NSHomeDirectory()
+        let home = NSHomeDirectory().replacingOccurrences(of: "\\", with: "/")
         if let root = repositoryRoot(containing: cwd) {
             return (root as NSString).lastPathComponent
         }

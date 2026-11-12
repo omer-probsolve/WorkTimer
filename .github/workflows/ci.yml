@@ -13,7 +13,7 @@ jobs:
       - name: Build
         run: swift build
       - name: Test
-        run: swift test
+        run: WORKTIMER_DATA_DIR="$RUNNER_TEMP/worktimer-tests" swift test
 
   windows:
     runs-on: windows-2022
